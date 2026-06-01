@@ -217,7 +217,7 @@ export default function Home() {
         {/* Grid */}
         <div style={{ position: "absolute", inset: 0, opacity: .025, backgroundImage: `linear-gradient(${C.amber} 1px,transparent 1px),linear-gradient(90deg,${C.amber} 1px,transparent 1px)`, backgroundSize: "60px 60px", pointerEvents: "none" }} />
 
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 60px 80px", width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }}>
+        <div className="hero-grid" style={{ maxWidth: 1280, margin: "0 auto", padding: "120px 60px 80px", width: "100%", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 60, alignItems: "center", position: "relative", zIndex: 2 }}>
           {/* Left */}
           <div style={{ opacity: heroVisible ? 1 : 0, transform: heroVisible ? "translateY(0)" : "translateY(40px)", transition: "all .8s ease" }}>
             <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "rgba(224,123,26,.1)", border: `1px solid rgba(224,123,26,.25)`, borderRadius: 100, padding: "7px 18px", marginBottom: 32 }}>
@@ -225,7 +225,7 @@ export default function Home() {
               <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: C.amberDark, letterSpacing: 1.5 }}>LIVE IN 40+ CITIES ACROSS INDIA</span>
             </div>
 
-            <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 72, fontWeight: 700, lineHeight: .92, color: C.textPrimary, letterSpacing: -2, marginBottom: 28 }}>
+            <h1 className="hero-h1" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 72, fontWeight: 700, lineHeight: .92, color: C.textPrimary, letterSpacing: -2, marginBottom: 28 }}>
               BREAKDOWN?<br />
               <span style={{ color: C.amber }}>
                 MECHANIC
@@ -327,7 +327,7 @@ export default function Home() {
 
       {/* ── TRUST BAR ────────────────────────────────────────── */}
       <section style={{ background: C.brown, padding: "20px 60px" }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto", display: "flex", gap: 40, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
+        <div className="trust-bar" style={{ maxWidth: 1280, margin: "0 auto", display: "flex", gap: 40, justifyContent: "center", alignItems: "center", flexWrap: "wrap" }}>
           {["🏆 India's #1 Roadside App", "✅ 50,000+ Jobs Done", "🔒 100% Verified Mechanics", "⚡ Avg 8 Min Response", "💳 Secure Payments", "📱 Available 24/7"].map(t => (
             <div key={t} style={{ fontSize: 13, color: "rgba(255,255,255,.7)", fontWeight: 500, display: "flex", alignItems: "center", gap: 6 }}>{t}</div>
           ))}
@@ -335,7 +335,7 @@ export default function Home() {
       </section>
 
       {/* ── HOW IT WORKS ─────────────────────────────────────── */}
-      <section style={{ padding: "100px 60px", background: C.white }}>
+      <section className="how-grid" style={{ padding: "100px 60px", background: C.white }}>
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 64 }} className="reveal">
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>HOW IT WORKS</span>
@@ -345,7 +345,7 @@ export default function Home() {
             <p style={{ fontSize: 16, color: C.textSecondary, maxWidth: 480, margin: "0 auto" }}>6 simple steps. No stress. No waiting. No hidden charges.</p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+          <div className="how-steps-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
             {steps.map((s, i) => (
               <div key={i} style={{ background: C.cream, borderRadius: 20, padding: "32px 28px", position: "relative", overflow: "hidden", transition: "all .3s", cursor: "default" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-6px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 16px 48px rgba(92,46,10,.1)"; }}
@@ -371,7 +371,7 @@ export default function Home() {
       </section>
 
       {/* ── SERVICES ─────────────────────────────────────────── */}
-      <section style={{ padding: "100px 60px", background: C.cream }}>
+      <section className="services-section" style={{ padding: "100px 60px", background: C.cream }}>
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 56 }}>
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>OUR SERVICES</span>
@@ -379,7 +379,7 @@ export default function Home() {
             <p style={{ fontSize: 16, color: C.textSecondary }}>12 specialised services · Transparent pricing · Available 24/7</p>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
+          <div className="services-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
             {services.map((s, i) => (
               <div key={i} onClick={() => router.push("/services")}
                 style={{ background: C.white, border: `1.5px solid ${activeService === i ? C.amber : C.border}`, borderRadius: 18, padding: "24px 20px", cursor: "pointer", transition: "all .25s", position: "relative", overflow: "hidden" }}
@@ -406,21 +406,21 @@ export default function Home() {
       </section>
 
       {/* ── STATS ────────────────────────────────────────────── */}
-      <section style={{ padding: "80px 60px", background: C.brown, position: "relative", overflow: "hidden" }}>
+      <section className="stats-section" style={{ padding: "80px 60px", background: C.brown, position: "relative", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(circle at 20% 50%, rgba(224,123,26,.1) 0%, transparent 50%), radial-gradient(circle at 80% 50%, rgba(194,74,26,.08) 0%, transparent 50%)`, pointerEvents: "none" }} />
         <div style={{ maxWidth: 1280, margin: "0 auto", position: "relative", zIndex: 2 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 2, background: "rgba(255,255,255,.05)", borderRadius: 20, overflow: "hidden" }}>
+          <div className="stats-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 2, background: "rgba(255,255,255,.05)", borderRadius: 20, overflow: "hidden" }}>
             {[
               { val: "50,000+", label: "Jobs Completed", icon: "✅", sub: "Since 2022" },
               { val: "2,800+", label: "Verified Mechanics", icon: "🔧", sub: "Across India" },
               { val: "40+", label: "Cities Live", icon: "📍", sub: "And growing" },
               { val: "< 8 min", label: "Avg Response", icon: "⚡", sub: "Industry best" },
             ].map((s, i) => (
-              <div key={i} style={{ padding: "44px 32px", textAlign: "center", background: "rgba(255,255,255,.03)", transition: "background .2s" }}
+              <div className="stat-cell" key={i} style={{ padding: "44px 32px", textAlign: "center", background: "rgba(255,255,255,.03)", transition: "background .2s" }}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,.07)"}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = "rgba(255,255,255,.03)"}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>{s.icon}</div>
-                <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 48, fontWeight: 700, color: "#f59e2a", lineHeight: 1, marginBottom: 8 }}>{s.val}</div>
+                <div className="stat-val" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 48, fontWeight: 700, color: "#f59e2a", lineHeight: 1, marginBottom: 8 }}>{s.val}</div>
                 <div style={{ fontSize: 14, color: "rgba(255,255,255,.7)", fontWeight: 600, marginBottom: 4 }}>{s.label}</div>
                 <div style={{ fontSize: 12, color: "rgba(255,255,255,.35)" }}>{s.sub}</div>
               </div>
@@ -431,7 +431,7 @@ export default function Home() {
 
       {/* ── FOR MECHANICS ────────────────────────────────────── */}
       <section style={{ padding: "100px 60px", background: C.white }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 80, alignItems: "center" }}>
+        <div className="mechanic-grid" style={{ maxWidth: 1280, margin: "0 auto", display: "grid", gridTemplateColumns: "1fr 1fr", gap: 80, alignItems: "center" }}>
           <div>
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 12 }}>FOR MECHANICS</span>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 44, fontWeight: 700, color: C.textPrimary, marginBottom: 16, lineHeight: 1.05 }}>
@@ -460,7 +460,7 @@ export default function Home() {
             </button>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+          <div className="mechanic-cards" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
             {[
               { label: "Monthly Average", val: "₹42,000", icon: "💰", color: C.amber, sub: "Top earners get ₹60K+" },
               { label: "Jobs Per Day", val: "8–12", icon: "🔧", color: C.orange, sub: "Flexible, your choice" },
@@ -487,7 +487,7 @@ export default function Home() {
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>TESTIMONIALS</span>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 48, fontWeight: 700, color: C.textPrimary }}>Real stories, <span style={{ color: C.amber }}>real people</span></h2>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
+          <div className="testimonials-grid" style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16 }}>
             {testimonials.map((t, i) => (
               <div key={i} style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 18, padding: 28, transition: "all .3s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-6px) rotate(.5deg)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 20px 48px rgba(92,46,10,.1)"; }}
@@ -508,11 +508,11 @@ export default function Home() {
       </section>
 
       {/* ── FOUNDERS ─────────────────────────────────────────── */}
-      <section style={{ padding: "80px 60px", background: C.white }}>
+      <section className="founders-section" style={{ padding: "80px 60px", background: C.white }}>
         <div style={{ maxWidth: 800, margin: "0 auto", textAlign: "center" }}>
           <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>BUILT BY</span>
           <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: C.textPrimary, marginBottom: 40 }}>The <span style={{ color: C.amber }}>founders</span> behind the wrench</h2>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div className="founders-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             {[
               { name: "K. Sai Charan", role: "CEO & Co-Founder", init: "SC", bio: "Visionary behind Mechanics 24/7, passionate about solving real problems for every Indian driver" },
               { name: "K. Balamuralikrishna", role: "Co-Founder & CTO", init: "BK", bio: "Tech leader driving the platform's innovation, architecture and product vision" },
@@ -531,15 +531,15 @@ export default function Home() {
       </section>
 
       {/* ── CTA ──────────────────────────────────────────────── */}
-      <section style={{ padding: "100px 60px", background: C.terra, textAlign: "center", position: "relative", overflow: "hidden" }}>
+      <section className="cta-section" style={{ padding: "100px 60px", background: C.terra, textAlign: "center", position: "relative", overflow: "hidden" }}>
         {[200, 400, 600].map((size, i) => (
           <div key={i} style={{ position: "absolute", top: "50%", left: "50%", width: size, height: size, borderRadius: "50%", border: "1px solid rgba(255,255,255,.08)", animation: `sos-ring 3s ease-out ${i * .9}s infinite`, pointerEvents: "none" }} />
         ))}
         <div style={{ position: "relative", zIndex: 2 }}>
           <div style={{ fontSize: 56, marginBottom: 16 }}>🚨</div>
-          <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 56, fontWeight: 700, color: "white", marginBottom: 16, lineHeight: 1 }}>STRANDED RIGHT NOW?</h2>
+          <h2 className="cta-h2" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 56, fontWeight: 700, color: "white", marginBottom: 16, lineHeight: 1 }}>STRANDED RIGHT NOW?</h2>
           <p style={{ fontSize: 18, color: "rgba(255,255,255,.8)", marginBottom: 40, maxWidth: 480, margin: "0 auto 40px" }}>Verified help is under 8 minutes away. Don't wait.</p>
-          <div style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
+          <div className="cta-buttons" style={{ display: "flex", gap: 16, justifyContent: "center", flexWrap: "wrap" }}>
             <button onClick={() => router.push("/register")}
               style={{ padding: "18px 48px", background: "white", color: C.terra, border: "none", borderRadius: 100, fontFamily: "'Oswald',sans-serif", fontSize: 20, fontWeight: 700, letterSpacing: 2, cursor: "pointer", boxShadow: "0 8px 32px rgba(0,0,0,.2)", transition: "all .2s" }}
               onMouseEnter={e => (e.currentTarget as HTMLElement).style.transform = "scale(1.04)"}
@@ -558,9 +558,9 @@ export default function Home() {
 
       {/* ── FOOTER ───────────────────────────────────────────── */}
       <footer style={{ background: C.textPrimary, color: "rgba(255,255,255,.7)", padding: "64px 60px 32px" }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr 1fr 1fr 1fr", gap: 40, marginBottom: 48 }}>
-            <div>
+        <div className="footer-inner" style={{ maxWidth: 1280, margin: "0 auto" }}>
+          <div className="footer-grid" style={{ display: "grid", gridTemplateColumns: "2.5fr 1fr 1fr 1fr 1fr", gap: 40, marginBottom: 48 }}>
+            <div className="footer-brand">
               <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: "#f59e2a", marginBottom: 14 }}>🔧 MECHANICS 24/7</div>
               <p style={{ fontSize: 13, lineHeight: 1.8, color: "rgba(255,255,255,.45)", marginBottom: 16, maxWidth: 280 }}>India's premier on-demand roadside assistance. Verified mechanics, anywhere, anytime, in minutes.</p>
               <div style={{ fontSize: 13, color: "rgba(255,255,255,.4)", fontFamily: "'Space Mono',monospace" }}>📞 1800-247-2474</div>
@@ -610,6 +610,65 @@ export default function Home() {
         @keyframes star-pop{0%{transform:scale(0) rotate(-30deg);opacity:0}80%{transform:scale(1.2) rotate(5deg);opacity:1}100%{transform:scale(1) rotate(0);opacity:1}}
         .reveal{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s ease}
         .reveal.revealed{opacity:1;transform:translateY(0)}
+
+        /* ── MOBILE ─────────────────────────────────────── */
+        @media(max-width:768px){
+          /* Hero section */
+          .hero-grid{grid-template-columns:1fr !important; padding:90px 20px 48px !important; gap:36px !important;}
+          .hero-h1{font-size:52px !important; letter-spacing:-1px !important;}
+          .hero-card{padding:20px !important; border-radius:16px !important;}
+
+          /* Trust bar */
+          .trust-bar{padding:16px 20px !important; gap:16px !important; justify-content:flex-start !important; overflow-x:auto !important; flex-wrap:nowrap !important;}
+
+          /* How it works */
+          .how-grid{padding:60px 20px !important;}
+          .how-steps-grid{grid-template-columns:1fr 1fr !important; gap:12px !important;}
+          .how-step{padding:20px 16px !important;}
+
+          /* Services */
+          .services-section{padding:60px 20px !important;}
+          .services-grid{grid-template-columns:1fr 1fr !important; gap:12px !important;}
+          .service-card{padding:20px 16px !important;}
+
+          /* Stats */
+          .stats-section{padding:60px 20px !important;}
+          .stats-grid{grid-template-columns:1fr 1fr !important; gap:2px !important;}
+          .stat-cell{padding:28px 16px !important;}
+          .stat-val{font-size:32px !important;}
+
+          /* For mechanics */
+          .mechanic-grid{grid-template-columns:1fr !important; gap:40px !important; padding:60px 20px !important;}
+          .mechanic-cards{grid-template-columns:1fr 1fr !important;}
+
+          /* Testimonials */
+          .testimonials-section{padding:60px 20px !important;}
+          .testimonials-grid{grid-template-columns:1fr !important; gap:12px !important;}
+
+          /* Founders */
+          .founders-section{padding:60px 20px !important;}
+          .founders-grid{grid-template-columns:1fr !important; gap:16px !important;}
+
+          /* CTA */
+          .cta-section{padding:60px 20px !important;}
+          .cta-h2{font-size:36px !important;}
+          .cta-buttons{flex-direction:column !important; align-items:center !important;}
+          .cta-buttons button{width:100% !important; max-width:300px !important;}
+
+          /* Footer */
+          .footer-grid{grid-template-columns:1fr 1fr !important; gap:28px !important;}
+          .footer-brand{grid-column:1/-1 !important;}
+          .footer-inner{padding:40px 20px 24px !important;}
+        }
+
+        @media(max-width:480px){
+          .hero-h1{font-size:40px !important;}
+          .how-steps-grid{grid-template-columns:1fr !important;}
+          .services-grid{grid-template-columns:1fr !important;}
+          .stats-grid{grid-template-columns:1fr 1fr !important;}
+          .mechanic-cards{grid-template-columns:1fr !important;}
+          .footer-grid{grid-template-columns:1fr !important;}
+        }
       `}</style>
     </div>
   );
