@@ -1,26 +1,143 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cream: #fdf6ed;
+  --cream2: #faefd8;
+  --amber: #e07b1a;
+  --amber-dark: #b85f0a;
+  --terra: #c24a1a;
+  --brown: #5c2e0a;
+  --text-primary: #2a1a08;
+  --text-secondary: #6b4e2a;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: #fdf6ed; color: #2a1a08; overflow-x: hidden; }
+
+input, select, textarea, button { font-family: inherit; }
+a { text-decoration: none; color: inherit; }
+
+.scroll-reveal { opacity: 0; transform: translateY(24px); transition: opacity .5s ease, transform .5s ease; }
+.scroll-reveal.revealed { opacity: 1; transform: translateY(0); }
+
+@keyframes pulse-dot { 0%,100%{transform:scale(1);opacity:1} 50%{transform:scale(1.5);opacity:.5} }
+@keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+@keyframes sos-ring { 0%{transform:translate(-50%,-50%) scale(.3);opacity:.8} 100%{transform:translate(-50%,-50%) scale(2);opacity:0} }
+@keyframes slide-up { from{transform:translateY(20px);opacity:0} to{transform:translateY(0);opacity:1} }
+@keyframes fade-in { from{opacity:0} to{opacity:1} }
+@keyframes spin { to{transform:rotate(360deg)} }
+@keyframes bar-grow { from{height:0} to{height:var(--h)} }
+@keyframes count-up { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+.animate-slide-up { animation: slide-up .4s ease forwards; }
+.animate-fade { animation: fade-in .3s ease forwards; }
+.animate-spin { animation: spin 1s linear infinite; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-pulse-dot { animation: pulse-dot 2s infinite; }
+
+/* Sidebar */
+.sidebar-link { display:flex; align-items:center; gap:10px; padding:10px 16px; border-radius:8px; font-size:14px; font-weight:500; color:#6b4e2a; cursor:pointer; transition:all .2s; border:none; background:transparent; width:100%; text-align:left; }
+.sidebar-link:hover { background:rgba(224,123,26,0.08); color:#b85f0a; }
+.sidebar-link.active { background:rgba(224,123,26,0.12); color:#b85f0a; font-weight:600; }
+
+/* Table */
+.data-table { width:100%; border-collapse:collapse; }
+.data-table th { background:#faefd8; padding:12px 16px; text-align:left; font-family:'Oswald',sans-serif; font-size:12px; font-weight:600; color:#6b4e2a; letter-spacing:.5px; border-bottom:2px solid rgba(224,123,26,0.15); }
+.data-table td { padding:12px 16px; font-size:14px; color:#2a1a08; border-bottom:1px solid rgba(224,123,26,0.08); }
+.data-table tr:hover td { background:rgba(224,123,26,0.03); }
+
+/* Modal overlay */
+.modal-overlay { position:fixed; inset:0; background:rgba(42,26,8,.5); backdrop-filter:blur(4px); z-index:2000; display:flex; align-items:center; justify-content:center; padding:20px; }
+.modal-box { background:#fffaf3; border-radius:20px; padding:32px; max-width:560px; width:100%; max-height:90vh; overflow-y:auto; box-shadow:0 24px 64px rgba(42,26,8,.2); animation:slide-up .3s ease; }
+
+/* Toast */
+.toast { position:fixed; bottom:24px; right:24px; background:#2a1a08; color:white; padding:14px 20px; border-radius:10px; font-size:14px; z-index:3000; animation:slide-up .3s ease; display:flex; align-items:center; gap:10px; }
+.toast.success { background:#2d7a3a; }
+.toast.error { background:#c0392b; }
+
+/* Step indicator */
+.step-dot { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:'Oswald',sans-serif; font-size:13px; font-weight:700; flex-shrink:0; }
+.step-dot.active { background:#e07b1a; color:white; }
+.step-dot.done { background:#2d7a3a; color:white; }
+.step-dot.pending { background:#faefd8; color:#a08060; border:2px solid rgba(224,123,26,0.2); }
+
+/* Upload zone */
+.upload-zone { border:2px dashed rgba(224,123,26,0.3); border-radius:12px; padding:24px; text-align:center; cursor:pointer; transition:all .2s; }
+.upload-zone:hover { border-color:#e07b1a; background:rgba(224,123,26,0.04); }
+
+/* Card hover */
+.hover-card { transition:all .2s; cursor:pointer; }
+.hover-card:hover { transform:translateY(-3px); box-shadow:0 12px 32px rgba(92,46,10,.1); }
+
+/* ─── DARK MODE ─────────────────────────────────────────────── */
+[data-theme="dark"] {
+  --cream: #1a1008;
+  --cream2: #241508;
+  --cream3: #2e1a0a;
+  --amber: #f59e2a;
+  --amber-dark: #e07b1a;
+  --terra: #e05030;
+  --brown: #0d0804;
+  --white: #201408;
+  --text-primary: #f0e6d0;
+  --text-secondary: #c4a070;
+  --text-muted: #7a6050;
+  --border: rgba(245,158,42,0.15);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+[data-theme="dark"] body {
+  background: #1a1008;
+  color: #f0e6d0;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+[data-theme="dark"] .data-table th {
+  background: #241508;
+  color: #c4a070;
+  border-color: rgba(245,158,42,0.15);
+}
+
+[data-theme="dark"] .data-table td {
+  border-color: rgba(245,158,42,0.08);
+  color: #f0e6d0;
+}
+
+[data-theme="dark"] .data-table tr:hover td {
+  background: rgba(245,158,42,0.05);
+}
+
+[data-theme="dark"] .sidebar-link {
+  color: #c4a070;
+}
+
+[data-theme="dark"] .sidebar-link:hover,
+[data-theme="dark"] .sidebar-link.active {
+  background: rgba(245,158,42,0.1);
+  color: #f59e2a;
+}
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] textarea {
+  background: #241508 !important;
+  color: #f0e6d0 !important;
+  border-color: rgba(245,158,42,0.2) !important;
+}
+
+[data-theme="dark"] .upload-zone {
+  border-color: rgba(245,158,42,0.2);
+}
+
+[data-theme="dark"] .modal-box {
+  background: #201408;
+  color: #f0e6d0;
+}
+
+[data-theme="dark"] .toast {
+  background: #241508;
+  border: 1px solid rgba(245,158,42,0.2);
 }
