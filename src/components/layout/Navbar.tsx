@@ -3,7 +3,6 @@ import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { store } from "@/store";
 import { C } from "@/components/ui";
-import { DarkModeToggle } from "@/components/ui/skeleton";
 
 export default function Navbar() {
   const router = useRouter();
@@ -11,6 +10,19 @@ export default function Navbar() {
   const [user, setUser] = useState(store.getUser());
   const [scrolled, setScrolled] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [dark, setDark] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("m247-dark");
+    if (saved === "true") {
+      setDark(true);
+      document.body.style.filter = "invert(1) hue-rotate(180deg)";
+      const style = document.createElement("style");
+      style.id = "dark-mode-img-fix";
+      style.textContent = "img,video,iframe,canvas{ filter:invert(1) hue-rotate(180deg); }";
+      document.head.appendChild(style);
+    }
+  }, []);
 
   useEffect(() => {
     setUser(store.getUser());
@@ -18,6 +30,23 @@ export default function Navbar() {
     window.addEventListener("scroll", onScroll);
     return () => window.removeEventListener("scroll", onScroll);
   }, [pathname]);
+
+  const toggleDark = () => {
+    const next = !dark;
+    setDark(next);
+    localStorage.setItem("m247-dark", String(next));
+    if (next) {
+      document.body.style.filter = "invert(1) hue-rotate(180deg)";
+      const style = document.getElementById("dark-mode-img-fix") || document.createElement("style");
+      style.id = "dark-mode-img-fix";
+      style.textContent = "img,video,iframe,canvas{ filter:invert(1) hue-rotate(180deg); }";
+      document.head.appendChild(style);
+    } else {
+      document.body.style.filter = "";
+      const el = document.getElementById("dark-mode-img-fix");
+      if (el) el.remove();
+    }
+  };
 
   const navLinks = [
     { label: "Home", href: "/" },
@@ -36,6 +65,30 @@ export default function Navbar() {
 
   const isActive = (href: string) => pathname === href;
 
+  const DarkToggle = ({ small }: { small?: boolean }) => (
+    <button onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}
+      style={{
+        width: small ? 40 : 44, height: small ? 22 : 24,
+        borderRadius: 12, border: "none", cursor: "pointer",
+        position: "relative", flexShrink: 0, padding: 0,
+        background: dark ? C.amberDark : "rgba(92,46,10,.15)",
+        transition: "background .3s",
+      }}>
+      <span style={{
+        position: "absolute",
+        top: small ? 2 : 3,
+        left: dark ? (small ? 20 : 22) : 2,
+        width: small ? 18 : 18, height: small ? 18 : 18,
+        borderRadius: "50%", background: "white",
+        transition: "left .3s",
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 10, lineHeight: 1, pointerEvents: "none",
+      }}>
+        {dark ? "🌙" : "☀️"}
+      </span>
+    </button>
+  );
+
   return (
     <>
       <nav style={{
@@ -46,58 +99,91 @@ export default function Navbar() {
         transition: "all .3s",
         boxShadow: scrolled ? "0 2px 20px rgba(92,46,10,.08)" : "none",
       }}>
-        <div style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
-          {/* Logo */}
+
+        {/* ── DESKTOP ── */}
+        <div className="nav-desktop" style={{ maxWidth: 1280, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16 }}>
           <div onClick={() => router.push("/")} style={{ fontFamily: "'Oswald',sans-serif", fontSize: 20, fontWeight: 700, color: C.amberDark, letterSpacing: 1, cursor: "pointer", flexShrink: 0 }}>
             🔧 MECHANICS<span style={{ color: C.terra }}>24/7</span>
           </div>
 
-          {/* Desktop Nav */}
           <div style={{ display: "flex", gap: 2, alignItems: "center", flex: 1, justifyContent: "center" }}>
             {navLinks.map(link => (
               <button key={link.href} onClick={() => router.push(link.href)}
-                style={{ padding: "6px 10px", background: isActive(link.href) ? `rgba(224,123,26,0.1)` : "transparent", color: isActive(link.href) ? C.amberDark : C.textSecondary, border: "none", borderRadius: 6, fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}>
+                style={{ padding: "6px 10px", background: isActive(link.href) ? "rgba(224,123,26,0.1)" : "transparent", color: isActive(link.href) ? C.amberDark : C.textSecondary, border: "none", borderRadius: 6, fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all .2s", whiteSpace: "nowrap" }}>
                 {link.label}
               </button>
             ))}
           </div>
 
-          {/* Right side */}
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-            <DarkModeToggle />
-
+            <DarkToggle />
             {user ? (
               <>
                 <button onClick={() => router.push(user.role === "admin" ? "/admin/dashboard" : user.role === "mechanic" ? "/mechanic/dashboard" : "/customer/dashboard")}
                   style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 8, cursor: "pointer", fontFamily: "'Inter',sans-serif", fontSize: 13 }}>
-                  <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.amber, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>
-                    {user.name.charAt(0).toUpperCase()}
-                  </span>
+                  <span style={{ width: 28, height: 28, borderRadius: "50%", background: C.amber, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 12, fontWeight: 700 }}>{user.name.charAt(0).toUpperCase()}</span>
                   {user.name.split(" ")[0]}
                 </button>
-                <button onClick={handleLogout} style={{ padding: "6px 14px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, cursor: "pointer", fontSize: 13, color: C.textSecondary }}>
-                  Logout
-                </button>
+                <button onClick={handleLogout} style={{ padding: "6px 14px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, cursor: "pointer", fontSize: 13, color: C.textSecondary }}>Logout</button>
               </>
             ) : (
               <>
-                <button onClick={() => router.push("/login")}
-                  style={{ padding: "7px 14px", background: "transparent", border: `1.5px solid ${C.amber}`, borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: C.amberDark, cursor: "pointer", letterSpacing: .5 }}>
-                  LOGIN
-                </button>
-                <button onClick={() => router.push("/register")}
-                  style={{ padding: "7px 14px", background: C.amber, border: "none", borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", letterSpacing: .5 }}>
-                  REGISTER
-                </button>
-                <button onClick={() => router.push("/admin/login")}
-                  style={{ padding: "7px 12px", background: C.brown, border: "none", borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: "white", cursor: "pointer", letterSpacing: .5 }}>
-                  ADMIN
-                </button>
+                <button onClick={() => router.push("/login")} style={{ padding: "7px 14px", background: "transparent", border: `1.5px solid ${C.amber}`, borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: C.amberDark, cursor: "pointer", letterSpacing: .5 }}>LOGIN</button>
+                <button onClick={() => router.push("/register")} style={{ padding: "7px 14px", background: C.amber, border: "none", borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: "white", cursor: "pointer", letterSpacing: .5 }}>REGISTER</button>
+                <button onClick={() => router.push("/admin/login")} style={{ padding: "7px 12px", background: C.brown, border: "none", borderRadius: 7, fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: "white", cursor: "pointer", letterSpacing: .5 }}>ADMIN</button>
               </>
             )}
           </div>
         </div>
+
+        {/* ── MOBILE ── */}
+        <div className="nav-mobile" style={{ display: "none" }}>
+          {/* Top row: logo + dark toggle */}
+          <div style={{ padding: "0 16px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div onClick={() => router.push("/")} style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.amberDark, cursor: "pointer" }}>
+              🔧 MECHANICS<span style={{ color: C.terra }}>24/7</span>
+            </div>
+            <DarkToggle small />
+          </div>
+
+          {/* Scrollable links strip */}
+          <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" as any, scrollbarWidth: "none" as any, borderTop: `1px solid ${C.border}`, msOverflowStyle: "none" as any }}>
+            <div style={{ display: "flex", gap: 6, padding: "8px 12px 10px", width: "max-content", alignItems: "center" }}>
+              {navLinks.map(link => (
+                <button key={link.href} onClick={() => router.push(link.href)}
+                  style={{ padding: "6px 13px", background: isActive(link.href) ? "rgba(224,123,26,.12)" : "transparent", color: isActive(link.href) ? C.amberDark : C.textSecondary, border: isActive(link.href) ? `1px solid rgba(224,123,26,.35)` : "1px solid rgba(0,0,0,.08)", borderRadius: 20, fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap" }}>
+                  {link.label}
+                </button>
+              ))}
+              {/* Divider */}
+              <span style={{ width: 1, height: 24, background: C.border, display: "inline-block", flexShrink: 0 }} />
+              {user ? (
+                <>
+                  <button onClick={() => router.push(user.role === "admin" ? "/admin/dashboard" : user.role === "mechanic" ? "/mechanic/dashboard" : "/customer/dashboard")}
+                    style={{ padding: "6px 13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 20, fontFamily: "'Inter',sans-serif", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap" }}>
+                    👤 {user.name.split(" ")[0]}
+                  </button>
+                  <button onClick={handleLogout} style={{ padding: "6px 13px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 20, fontSize: 13, color: C.textSecondary, cursor: "pointer", whiteSpace: "nowrap" }}>Logout</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => router.push("/login")} style={{ padding: "6px 14px", background: "transparent", border: `1.5px solid ${C.amber}`, borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: C.amberDark, cursor: "pointer", whiteSpace: "nowrap" }}>LOGIN</button>
+                  <button onClick={() => router.push("/register")} style={{ padding: "6px 14px", background: C.amber, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap" }}>REGISTER</button>
+                  <button onClick={() => router.push("/admin/login")} style={{ padding: "6px 12px", background: C.brown, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap" }}>ADMIN</button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
       </nav>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .nav-desktop { display: none !important; }
+          .nav-mobile  { display: block !important; }
+        }
+        .nav-mobile div::-webkit-scrollbar { display: none; }
+      `}</style>
     </>
   );
 }
