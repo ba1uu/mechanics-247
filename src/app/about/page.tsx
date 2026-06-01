@@ -9,6 +9,9 @@ export default function AboutPage() {
   const team = [
     { name: "K. Sai Charan", role: "CEO & Co-Founder", bio: "Visionary entrepreneur passionate about solving real-world problems for every Indian driver", init: "SC" },
     { name: "K. Balamuralikrishna", role: "Co-Founder & CTO", bio: "Tech leader driving the platform's innovation, architecture, and product vision", init: "BK" },
+    { name: "K. Naveen", role: "Co-Founder", bio: "Driving growth and operations, ensuring every driver gets help when they need it most", init: "KN" },
+    { name: "K. Sai Praneeth", role: "Co-Founder", bio: "Focused on mechanic partnerships and quality assurance across all service categories", init: "SP" },
+    { name: "P. Rajendra", role: "Co-Founder", bio: "Leading customer experience and expanding Mechanics 24/7 to new cities across India", init: "PR" },
   ];
 
   const milestones = [
@@ -89,12 +92,12 @@ export default function AboutPage() {
 
       {/* Founders */}
       <section style={{ padding: "80px 60px", background: C.white }}>
-        <div style={{ maxWidth: 800, margin: "0 auto" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto" }}>
           <div style={{ textAlign: "center", marginBottom: 48 }}>
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 8 }}>THE FOUNDERS</span>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: C.textPrimary }}>The minds behind <span style={{ color: C.amber }}>the wrench</span></h2>
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 24 }}>
             {team.map((t, i) => (
               <Card key={i} style={{ textAlign: "center", padding: 36 }}>
                 <div style={{ width: 88, height: 88, borderRadius: "50%", background: `linear-gradient(135deg, ${C.amber}, ${C.terra})`, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: "white", margin: "0 auto 20px", boxShadow: `0 8px 24px rgba(224,123,26,.3)` }}>
