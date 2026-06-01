@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { C, Input, Btn } from "@/components/ui";
 import { store } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,23 +20,52 @@ export default function LoginPage() {
   const handleLogin = async () => {
     setLoading(true);
     setError("");
-    await new Promise(r => setTimeout(r, 1000));
 
-    if (tab === "admin") {
-      if (form.email === "admin@mechanics247.com" && form.password === "admin123") {
+    try {
+      // Admin demo shortcut
+      if (tab === "admin" && form.email === "admin@mechanics247.com" && form.password === "admin123") {
         store.setUser({ id: "admin1", name: "Admin User", email: form.email, phone: "9999999999", role: "admin" });
         router.push("/admin/dashboard");
-      } else {
-        setError("Invalid admin credentials. Try: admin@mechanics247.com / admin123");
+        return;
       }
-    } else if (tab === "mechanic") {
-      store.setUser({ id: "M001", name: "Rajesh Kumar", email: form.email || "rajesh@example.com", phone: form.phone || "9876543210", role: "mechanic", city: "Nellore" });
-      router.push("/mechanic/dashboard");
-    } else {
-      store.setUser({ id: "C001", name: "Demo Customer", email: form.email || "customer@example.com", phone: form.phone || "9123456789", role: "customer", city: "Nellore" });
-      router.push("/customer/dashboard");
+
+      // Supabase auth
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      });
+
+      if (authError) throw new Error(authError.message);
+
+      // Fetch profile
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", authData.user.id)
+        .single();
+
+      if (profileError || !profile) throw new Error("Profile not found. Please register first.");
+
+      if (tab !== "admin" && profile.role !== tab) {
+        throw new Error(`This account is a ${profile.role} account, not ${tab}.`);
+      }
+
+      store.setUser({
+        id: profile.id,
+        name: profile.name,
+        email: profile.email,
+        phone: profile.phone,
+        role: profile.role,
+        city: profile.city,
+      });
+
+      router.push(`/${profile.role}/dashboard`);
+
+    } catch (err: any) {
+      setError(err.message || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleOtpChange = (i: number, v: string) => {
@@ -58,20 +88,15 @@ export default function LoginPage() {
           .login-title { font-size: 26px !important; }
           .tab-label { font-size: 11px !important; padding: 9px 4px !important; }
         }
-        @media (max-width: 380px) {
-          .otp-input { width: 34px !important; height: 40px !important; font-size: 16px !important; }
-          .login-right-panel { padding: 90px 16px 40px !important; }
-        }
       `}</style>
 
       <Navbar />
       <div className="login-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", paddingTop: 64 }}>
 
-        {/* Left panel — hidden on mobile */}
         <div className="login-left-panel" style={{ background: C.brown, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(circle at 30% 40%,rgba(224,123,26,.15) 0%,transparent 60%)` }} />
           <div style={{ position: "relative", zIndex: 2, textAlign: "center", color: "white" }}>
-            <div style={{ fontSize: 80, marginBottom: 24, animation: "float 3s ease-in-out infinite" }}>🔧</div>
+            <div style={{ fontSize: 80, marginBottom: 24 }}>🔧</div>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 36, fontWeight: 700, color: "#f59e2a", marginBottom: 16 }}>WELCOME BACK!</h2>
             <p style={{ fontSize: 15, color: "rgba(255,255,255,.65)", lineHeight: 1.7, maxWidth: 320 }}>
               Log in to access your dashboard, track bookings, and get roadside help anytime.
@@ -84,13 +109,11 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* Right panel */}
         <div className="login-right-panel" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
           <div className="login-form-inner" style={{ width: "100%", maxWidth: 440 }}>
             <h1 className="login-title" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Sign In</h1>
             <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 32 }}>Don't have an account? <a href="/register" style={{ color: C.amber, fontWeight: 600 }}>Register here</a></p>
 
-            {/* Role tabs */}
             <div style={{ display: "flex", background: C.cream2, borderRadius: 10, padding: 4, marginBottom: 28 }}>
               {(["customer", "mechanic", "admin"] as const).map(t => (
                 <button key={t} onClick={() => { setTab(t); setError(""); }}
@@ -115,7 +138,11 @@ export default function LoginPage() {
                   </div>
                 )}
 
-                {error && <div style={{ background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 12, fontSize: 13, color: "#c0392b" }}>{error}</div>}
+                {error && (
+                  <div style={{ background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 12, fontSize: 13, color: "#c0392b" }}>
+                    ⚠️ {error}
+                  </div>
+                )}
 
                 <Btn onClick={handleLogin} style={{ width: "100%", justifyContent: "center", padding: "13px" }} disabled={loading}>
                   {loading ? "⏳ Signing in..." : `Sign In as ${tab.charAt(0).toUpperCase() + tab.slice(1)}`}

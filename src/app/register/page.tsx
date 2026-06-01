@@ -4,21 +4,19 @@ import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { C, Input, Btn } from "@/components/ui";
 import { store } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const STATES = ["Andhra Pradesh", "Karnataka", "Tamil Nadu", "Telangana", "Maharashtra", "Gujarat", "Rajasthan", "Uttar Pradesh", "Delhi", "West Bengal"];
 const VEHICLE_TYPES = ["Bike / Scooter", "Car", "Auto Rickshaw", "Electric Vehicle", "Truck / Commercial"];
 const BRANDS = ["Maruti Suzuki", "Hyundai", "Honda", "Toyota", "Tata", "Bajaj", "Hero", "TVS", "Yamaha", "Royal Enfield", "Mahindra", "Ford", "Other"];
 const FUEL = ["Petrol", "Diesel", "CNG", "Electric", "Hybrid"];
-const ISSUES = ["Puncture", "Battery Dead", "Engine Problem", "Fuel Empty", "AC Issue", "Electrical Fault", "Locked Out", "Brake Problem", "Towing Required", "Other"];
 
 export default function RegisterPage() {
   const router = useRouter();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
-  const [otpVerified, setOtpVerified] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState("");
 
   const [personal, setPersonal] = useState({ name: "", phone: "", email: "", password: "", confirm: "", photo: "" });
   const [address, setAddress] = useState({ state: "", district: "", city: "", pin: "" });
@@ -46,17 +44,6 @@ export default function RegisterPage() {
     return Object.keys(e).length === 0;
   };
 
-  const handleOtpChange = (i: number, v: string) => {
-    if (v.length > 1) return;
-    const newOtp = [...otp];
-    newOtp[i] = v;
-    setOtp(newOtp);
-    if (v && i < 5) (document.getElementById(`reg-otp-${i + 1}`) as HTMLInputElement)?.focus();
-    if (i === 5 && v) {
-      setTimeout(() => setOtpVerified(true), 500);
-    }
-  };
-
   const handleNext = () => {
     if (!validate()) return;
     setStep(s => s + 1);
@@ -64,26 +51,76 @@ export default function RegisterPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 1500));
-    store.setUser({ id: "C_" + Date.now(), name: personal.name, email: personal.email, phone: personal.phone, role: "customer", city: address.city, state: address.state });
-    if (vehicle.type) {
-      store.addVehicle({ id: "V_" + Date.now(), type: vehicle.type, brand: vehicle.brand, model: vehicle.model, number: vehicle.number, fuel: vehicle.fuel });
+    setServerError("");
+
+    try {
+      // 1. Create auth user
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: personal.email,
+        password: personal.password,
+      });
+
+      if (authError) throw new Error(authError.message);
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Failed to create user");
+
+      // 2. Save profile
+      const { error: profileError } = await supabase.from("profiles").insert({
+        id: userId,
+        name: personal.name,
+        phone: personal.phone,
+        email: personal.email,
+        role: "customer",
+        city: address.city,
+        state: address.state,
+      });
+
+      if (profileError) throw new Error(profileError.message);
+
+      // 3. Save vehicle if provided
+      if (vehicle.type) {
+        await supabase.from("vehicles").insert({
+          user_id: userId,
+          type: vehicle.type,
+          brand: vehicle.brand,
+          model: vehicle.model,
+          number: vehicle.number,
+          fuel: vehicle.fuel,
+        });
+      }
+
+      // 4. Update local store
+      store.setUser({
+        id: userId,
+        name: personal.name,
+        email: personal.email,
+        phone: personal.phone,
+        role: "customer",
+        city: address.city,
+        state: address.state,
+      });
+
+      router.push("/customer/dashboard");
+
+    } catch (err: any) {
+      setServerError(err.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-    router.push("/customer/dashboard");
   };
 
   const steps = [
     { num: 1, label: "Personal Details" },
     { num: 2, label: "Address" },
     { num: 3, label: "Vehicle Info" },
-    { num: 4, label: "OTP Verify" },
+    { num: 4, label: "Confirm" },
   ];
 
   return (
     <div style={{ background: C.cream, minHeight: "100vh" }}>
       <Navbar />
-      <div style={{ paddingTop: 80, paddingBottom: 60, maxWidth: 720, margin: "0 auto", padding: "80px 24px 60px" }}>
+      <div style={{ maxWidth: 720, margin: "0 auto", padding: "80px 24px 60px" }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
           <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 36, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Create Your Account</h1>
           <p style={{ fontSize: 15, color: C.textSecondary }}>Join 1,50,000+ customers getting roadside help in minutes</p>
@@ -105,18 +142,17 @@ export default function RegisterPage() {
         </div>
 
         <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "36px 40px" }}>
-          {/* STEP 1: Personal */}
-          {step === 1 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "slide-up .3s ease" }}>
-              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Personal Details</h2>
 
+          {/* STEP 1 */}
+          {step === 1 && (
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Personal Details</h2>
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 8 }}>
                 <div style={{ width: 80, height: 80, borderRadius: "50%", background: C.cream2, border: `2px dashed ${C.amber}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 28 }}>
                   {personal.photo ? "📸" : "👤"}
                 </div>
               </div>
               <p style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginTop: -12 }}>Click to upload profile photo</p>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <Input label="Full Name" value={personal.name} onChange={v => setP("name", v)} placeholder="Enter your full name" required />
@@ -142,9 +178,9 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* STEP 2: Address */}
+          {/* STEP 2 */}
           {step === 2 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "slide-up .3s ease" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Your Address</h2>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
@@ -166,77 +202,68 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* STEP 3: Vehicle */}
+          {/* STEP 3 */}
           {step === 3 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20, animation: "slide-up .3s ease" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Vehicle Information</h2>
               <p style={{ fontSize: 13, color: C.textMuted }}>Optional — you can add vehicles later from your dashboard</p>
-
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div>
-                  <Input label="Vehicle Type" type="select" value={vehicle.type} onChange={v => setV("type", v)} options={VEHICLE_TYPES} />
-                </div>
-                <div>
-                  <Input label="Vehicle Brand" type="select" value={vehicle.brand} onChange={v => setV("brand", v)} options={BRANDS} />
-                </div>
-                <div>
-                  <Input label="Vehicle Model" value={vehicle.model} onChange={v => setV("model", v)} placeholder="e.g. Swift, Activa" />
-                </div>
-                <div>
-                  <Input label="Vehicle Number" value={vehicle.number} onChange={v => setV("number", v)} placeholder="e.g. AP 15 AB 1234" />
-                </div>
-                <div>
-                  <Input label="Fuel Type" type="select" value={vehicle.fuel} onChange={v => setV("fuel", v)} options={FUEL} />
-                </div>
+                <div><Input label="Vehicle Type" type="select" value={vehicle.type} onChange={v => setV("type", v)} options={VEHICLE_TYPES} /></div>
+                <div><Input label="Vehicle Brand" type="select" value={vehicle.brand} onChange={v => setV("brand", v)} options={BRANDS} /></div>
+                <div><Input label="Vehicle Model" value={vehicle.model} onChange={v => setV("model", v)} placeholder="e.g. Swift, Activa" /></div>
+                <div><Input label="Vehicle Number" value={vehicle.number} onChange={v => setV("number", v)} placeholder="e.g. AP 15 AB 1234" /></div>
+                <div><Input label="Fuel Type" type="select" value={vehicle.fuel} onChange={v => setV("fuel", v)} options={FUEL} /></div>
               </div>
             </div>
           )}
 
-          {/* STEP 4: OTP */}
+          {/* STEP 4 — Confirm (no OTP) */}
           {step === 4 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 20, alignItems: "center", animation: "slide-up .3s ease" }}>
-              <div style={{ fontSize: 56 }}>📱</div>
-              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Verify Your Number</h2>
-              <p style={{ fontSize: 14, color: C.textSecondary, textAlign: "center" }}>
-                We'll send a 6-digit OTP to <strong style={{ color: C.textPrimary }}>+91 {personal.phone}</strong>
+            <div style={{ display: "flex", flexDirection: "column", gap: 20, alignItems: "center" }}>
+              <div style={{ fontSize: 56 }}>✅</div>
+              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Almost Done!</h2>
+              <p style={{ fontSize: 14, color: C.textSecondary, textAlign: "center", maxWidth: 380 }}>
+                Review your details and click <strong>Create Account</strong> to complete your registration.
               </p>
 
-              {!otpSent ? (
-                <button onClick={() => setOtpSent(true)}
-                  style={{ padding: "13px 32px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 600, cursor: "pointer", letterSpacing: 1 }}>
-                  SEND OTP
-                </button>
-              ) : (
-                <div style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {otp.map((digit, i) => (
-                      <input key={i} id={`reg-otp-${i}`} value={digit} onChange={e => handleOtpChange(i, e.target.value)} maxLength={1}
-                        style={{ width: 52, height: 56, textAlign: "center", border: `2px solid ${digit ? C.amber : C.border}`, borderRadius: 10, fontSize: 22, fontWeight: 700, fontFamily: "'Oswald',sans-serif", background: C.cream, outline: "none", transition: "border .2s" }} />
-                    ))}
+              {/* Summary */}
+              <div style={{ width: "100%", background: C.cream2, borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { label: "Name", value: personal.name },
+                  { label: "Email", value: personal.email },
+                  { label: "Phone", value: personal.phone },
+                  { label: "City", value: `${address.city}, ${address.state}` },
+                  vehicle.type ? { label: "Vehicle", value: `${vehicle.brand} ${vehicle.model} (${vehicle.type})` } : null,
+                ].filter(Boolean).map((row: any) => (
+                  <div key={row.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                    <span style={{ color: C.textMuted }}>{row.label}</span>
+                    <span style={{ color: C.textPrimary, fontWeight: 600 }}>{row.value}</span>
                   </div>
-                  {otpVerified && (
-                    <div style={{ background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 8, padding: "10px 20px", color: C.green, fontWeight: 600, fontSize: 14, display: "flex", alignItems: "center", gap: 8 }}>
-                      ✅ OTP Verified Successfully!
-                    </div>
-                  )}
-                  <p style={{ fontSize: 12, color: C.textMuted }}>Didn't receive? <button style={{ background: "none", border: "none", color: C.amber, cursor: "pointer", fontWeight: 600 }}>Resend OTP</button></p>
-                  <p style={{ fontSize: 11, color: C.textMuted, background: C.cream2, padding: "8px 16px", borderRadius: 8 }}>💡 Demo: Enter any 6 digits to verify</p>
-                </div>
-              )}
+                ))}
+              </div>
+
+              <div style={{ background: "#fffbea", border: "1px solid #f59e0b", borderRadius: 8, padding: "10px 16px", fontSize: 12, color: "#92400e", textAlign: "center" }}>
+                📱 Phone OTP verification coming soon
+              </div>
             </div>
           )}
 
-          {/* Navigation buttons */}
+          {/* Server error */}
+          {serverError && (
+            <div style={{ marginTop: 16, background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 12, fontSize: 13, color: "#c0392b" }}>
+              ⚠️ {serverError}
+            </div>
+          )}
+
+          {/* Navigation */}
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 32, paddingTop: 24, borderTop: `1px solid ${C.border}` }}>
             {step > 1 ? (
               <Btn variant="secondary" onClick={() => setStep(s => s - 1)}>← Back</Btn>
-            ) : (
-              <div />
-            )}
+            ) : <div />}
             {step < 4 ? (
               <Btn onClick={handleNext}>Continue →</Btn>
             ) : (
-              <Btn onClick={handleSubmit} disabled={loading || (!otpVerified && otpSent)} style={{ minWidth: 160, justifyContent: "center" }}>
+              <Btn onClick={handleSubmit} disabled={loading} style={{ minWidth: 180, justifyContent: "center" }}>
                 {loading ? "⏳ Creating account..." : "✅ Create Account"}
               </Btn>
             )}
