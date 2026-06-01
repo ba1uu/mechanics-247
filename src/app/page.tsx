@@ -509,13 +509,16 @@ export default function Home() {
 
       {/* ── FOUNDERS ─────────────────────────────────────────── */}
       <section className="founders-section" style={{ padding: "80px 60px", background: C.white }}>
-        <div style={{ maxWidth: 800, margin: "0 auto", textAlign: "center" }}>
+        <div style={{ maxWidth: 1100, margin: "0 auto", textAlign: "center" }}>
           <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>BUILT BY</span>
           <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: C.textPrimary, marginBottom: 40 }}>The <span style={{ color: C.amber }}>founders</span> behind the wrench</h2>
-          <div className="founders-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+          <div className="founders-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 24 }}>
             {[
               { name: "K. Sai Charan", role: "CEO & Co-Founder", init: "SC", bio: "Visionary behind Mechanics 24/7, passionate about solving real problems for every Indian driver" },
               { name: "K. Balamuralikrishna", role: "Co-Founder & CTO", init: "BK", bio: "Tech leader driving the platform's innovation, architecture and product vision" },
+              { name: "K. Naveen", role: "Co-Founder", init: "KN", bio: "Driving growth and operations, ensuring every driver gets help when they need it most" },
+              { name: "K. Sai Praneeth", role: "Co-Founder", init: "SP", bio: "Focused on mechanic partnerships and quality assurance across all service categories" },
+              { name: "P. Rajendra", role: "Co-Founder", init: "PR", bio: "Leading customer experience and expanding Mechanics 24/7 to new cities across India" },
             ].map((f, i) => (
               <div key={i} style={{ background: C.cream, borderRadius: 20, padding: 32, textAlign: "center", transition: "all .2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-4px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 16px 40px rgba(92,46,10,.1)"; }}
@@ -568,7 +571,7 @@ export default function Home() {
               {/* Founders credit */}
               <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(245,158,42,.08)", border: "1px solid rgba(245,158,42,.15)", borderRadius: 8 }}>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: .5, marginBottom: 4 }}>FOUNDED BY</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", fontWeight: 600 }}>K. Sai Charan & K. Balamuralikrishna</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", fontWeight: 600 }}>K. Sai Charan · K. Balamuralikrishna · K. Naveen · K. Sai Praneeth · P. Rajendra</div>
               </div>
             </div>
             {[
@@ -647,7 +650,7 @@ export default function Home() {
 
           /* Founders */
           .founders-section{padding:60px 20px !important;}
-          .founders-grid{grid-template-columns:1fr !important; gap:16px !important;}
+          .founders-grid{grid-template-columns:1fr 1fr !important; gap:16px !important;}
 
           /* CTA */
           .cta-section{padding:60px 20px !important;}
