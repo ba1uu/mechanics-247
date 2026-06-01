@@ -16,10 +16,10 @@ export default function Navbar() {
     if (saved === "true") {
       setDark(true);
       document.body.style.filter = "invert(1) hue-rotate(180deg)";
-      const style = document.createElement("style");
-      style.id = "dark-mode-img-fix";
-      style.textContent = "img,video,iframe,canvas{ filter:invert(1) hue-rotate(180deg); }";
-      document.head.appendChild(style);
+      const s = document.createElement("style");
+      s.id = "dark-fix";
+      s.textContent = "img,video,iframe,canvas{filter:invert(1) hue-rotate(180deg)}";
+      document.head.appendChild(s);
     }
   }, []);
 
@@ -36,14 +36,13 @@ export default function Navbar() {
     localStorage.setItem("m247-dark", String(next));
     if (next) {
       document.body.style.filter = "invert(1) hue-rotate(180deg)";
-      const style = document.getElementById("dark-mode-img-fix") || document.createElement("style");
-      style.id = "dark-mode-img-fix";
-      style.textContent = "img,video,iframe,canvas{ filter:invert(1) hue-rotate(180deg); }";
-      document.head.appendChild(style);
+      const s = document.getElementById("dark-fix") || document.createElement("style");
+      s.id = "dark-fix";
+      s.textContent = "img,video,iframe,canvas{filter:invert(1) hue-rotate(180deg)}";
+      document.head.appendChild(s);
     } else {
       document.body.style.filter = "";
-      const el = document.getElementById("dark-mode-img-fix");
-      if (el) el.remove();
+      document.getElementById("dark-fix")?.remove();
     }
   };
 
@@ -56,13 +55,34 @@ export default function Navbar() {
     { label: "Contact", href: "/contact" },
   ];
 
-  const handleLogout = () => {
-    store.logout();
-    setUser(null);
-    router.push("/");
-  };
-
+  const handleLogout = () => { store.logout(); setUser(null); router.push("/"); };
   const isActive = (href: string) => pathname === href;
+
+  /* ── Shared toggle button ── */
+  const Toggle = () => (
+    <button onClick={toggleDark}
+      style={{
+        width: 52, height: 28, borderRadius: 14, border: "none", cursor: "pointer",
+        position: "relative", padding: 0, flexShrink: 0,
+        background: dark ? "#4a3000" : "#e8d5b0",
+        transition: "background .3s",
+        display: "flex", alignItems: "center",
+      }}>
+      {/* track icons */}
+      <span style={{ position: "absolute", left: 6, fontSize: 11, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>☀️</span>
+      <span style={{ position: "absolute", right: 6, fontSize: 11, lineHeight: 1, userSelect: "none", pointerEvents: "none" }}>🌙</span>
+      {/* knob */}
+      <span style={{
+        position: "absolute",
+        left: dark ? 26 : 2,
+        width: 24, height: 24, borderRadius: "50%",
+        background: "white",
+        boxShadow: "0 1px 4px rgba(0,0,0,.25)",
+        transition: "left .3s",
+        display: "block",
+      }} />
+    </button>
+  );
 
   return (
     <>
@@ -89,11 +109,7 @@ export default function Navbar() {
             ))}
           </div>
           <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
-            {/* Dark toggle — pure CSS, no emoji */}
-            <button onClick={toggleDark} title={dark ? "Light mode" : "Dark mode"}
-              style={{ width: 44, height: 24, borderRadius: 12, border: "none", cursor: "pointer", position: "relative", flexShrink: 0, padding: 0, background: dark ? C.amberDark : "rgba(92,46,10,.2)", transition: "background .3s" }}>
-              <span style={{ position: "absolute", top: 3, left: dark ? 23 : 3, width: 18, height: 18, borderRadius: "50%", background: "white", transition: "left .3s", display: "block" }} />
-            </button>
+            <Toggle />
             {user ? (
               <>
                 <button onClick={() => router.push(user.role === "admin" ? "/admin/dashboard" : user.role === "mechanic" ? "/mechanic/dashboard" : "/customer/dashboard")}
@@ -115,41 +131,60 @@ export default function Navbar() {
 
         {/* ── MOBILE ── */}
         <div className="nav-mobile" style={{ display: "none" }}>
-          {/* Row 1: Logo + dark toggle */}
-          <div style={{ padding: "0 16px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <div onClick={() => router.push("/")} style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.amberDark, cursor: "pointer" }}>
+          {/* Row 1: Logo + toggle */}
+          <div style={{ padding: "0 14px", height: 52, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div onClick={() => router.push("/")} style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 700, color: C.amberDark, cursor: "pointer" }}>
               🔧 MECHANICS<span style={{ color: C.terra }}>24/7</span>
             </div>
-            {/* Pure CSS dark toggle — no emoji */}
-            <button onClick={toggleDark}
-              style={{ width: 40, height: 22, borderRadius: 11, border: "none", cursor: "pointer", position: "relative", padding: 0, flexShrink: 0, background: dark ? C.amberDark : "rgba(92,46,10,.2)", transition: "background .3s" }}>
-              <span style={{ position: "absolute", top: 2, left: dark ? 20 : 2, width: 18, height: 18, borderRadius: "50%", background: "white", transition: "left .3s", display: "block" }} />
-            </button>
+            <Toggle />
           </div>
 
-          {/* Row 2: Full-width scrollable strip — starts from left edge */}
-          <div style={{ borderTop: `1px solid ${C.border}`, overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" as any }}>
-            <div style={{ display: "inline-flex", gap: 6, padding: "8px 12px 10px 12px", alignItems: "center" }}>
+          {/* Row 2: Scrollable strip — full width, starts from Home */}
+          <div style={{
+            borderTop: `1px solid ${C.border}`,
+            overflowX: "scroll",
+            overflowY: "hidden",
+            WebkitOverflowScrolling: "touch" as any,
+            msOverflowStyle: "none" as any,
+            scrollbarWidth: "none" as any,
+          }}>
+            <div style={{
+              display: "flex",
+              gap: 6,
+              padding: "8px 14px 10px",
+              alignItems: "center",
+              /* let it grow as wide as needed */
+              width: "max-content",
+              minWidth: "100%",
+            }}>
               {navLinks.map(link => (
                 <button key={link.href} onClick={() => router.push(link.href)}
-                  style={{ padding: "5px 13px", background: isActive(link.href) ? "rgba(224,123,26,.12)" : "transparent", color: isActive(link.href) ? C.amberDark : C.textSecondary, border: `1px solid ${isActive(link.href) ? "rgba(224,123,26,.4)" : "rgba(0,0,0,.1)"}`, borderRadius: 20, fontFamily: "'Inter',sans-serif", fontSize: 13, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                  style={{
+                    padding: "5px 12px",
+                    background: isActive(link.href) ? "rgba(224,123,26,.12)" : "transparent",
+                    color: isActive(link.href) ? C.amberDark : C.textSecondary,
+                    border: `1px solid ${isActive(link.href) ? "rgba(224,123,26,.4)" : "rgba(0,0,0,.1)"}`,
+                    borderRadius: 20, fontFamily: "'Inter',sans-serif", fontSize: 13,
+                    fontWeight: isActive(link.href) ? 600 : 500,
+                    cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                  }}>
                   {link.label}
                 </button>
               ))}
-              <span style={{ width: 1, height: 22, background: C.border, flexShrink: 0 }} />
+              <span style={{ width: 1, height: 20, background: C.border, flexShrink: 0 }} />
               {user ? (
                 <>
                   <button onClick={() => router.push(user.role === "admin" ? "/admin/dashboard" : user.role === "mechanic" ? "/mechanic/dashboard" : "/customer/dashboard")}
-                    style={{ padding: "5px 13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 20, fontFamily: "'Inter',sans-serif", fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+                    style={{ padding: "5px 12px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 20, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
                     👤 {user.name.split(" ")[0]}
                   </button>
-                  <button onClick={handleLogout} style={{ padding: "5px 13px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 20, fontSize: 13, color: C.textSecondary, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Logout</button>
+                  <button onClick={handleLogout} style={{ padding: "5px 12px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 20, fontSize: 13, color: C.textSecondary, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>Logout</button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => router.push("/login")} style={{ padding: "5px 14px", background: "transparent", border: `1.5px solid ${C.amber}`, borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: C.amberDark, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>LOGIN</button>
-                  <button onClick={() => router.push("/register")} style={{ padding: "5px 14px", background: C.amber, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>REGISTER</button>
-                  <button onClick={() => router.push("/admin/login")} style={{ padding: "5px 12px", background: C.brown, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>ADMIN</button>
+                  <button onClick={() => router.push("/login")} style={{ padding: "5px 13px", background: "transparent", border: `1.5px solid ${C.amber}`, borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: C.amberDark, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>LOGIN</button>
+                  <button onClick={() => router.push("/register")} style={{ padding: "5px 13px", background: C.amber, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 12, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>REGISTER</button>
+                  <button onClick={() => router.push("/admin/login")} style={{ padding: "5px 11px", background: C.brown, border: "none", borderRadius: 20, fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, color: "white", cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>ADMIN</button>
                 </>
               )}
             </div>
@@ -162,7 +197,7 @@ export default function Navbar() {
           .nav-desktop { display: none !important; }
           .nav-mobile  { display: block !important; }
         }
-        .nav-mobile ::-webkit-scrollbar { display: none; }
+        .nav-mobile div::-webkit-scrollbar { display: none; }
       `}</style>
     </>
   );
