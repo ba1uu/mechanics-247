@@ -11,7 +11,7 @@ export default function NotFound() {
       <div style={{ fontSize: 80, marginBottom: 8, display: "inline-block", animation: "float 3s ease-in-out infinite" }}>🔧</div>
 
       {/* 404 */}
-      <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 120, fontWeight: 700, color: C.cream2, lineHeight: 1, marginBottom: -20, userSelect: "none", textShadow: `2px 2px 0 ${C.cream3}` }}>
+      <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 120, fontWeight: 700, color: C.cream2, lineHeight: 1, marginBottom: -20, userSelect: "none", textShadow: `2px 2px 0 ${C.cream2}` }}>
         404
       </div>
 

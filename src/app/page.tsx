@@ -337,7 +337,7 @@ export default function Home() {
       {/* ── HOW IT WORKS ─────────────────────────────────────── */}
       <section style={{ padding: "100px 60px", background: C.white }}>
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          <div style={{ textAlign: "center", marginBottom: 64 }} className="reveal" style2={{ opacity: 0 }}>
+          <div style={{ textAlign: "center", marginBottom: 64 }} className="reveal">
             <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 10 }}>HOW IT WORKS</span>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 48, fontWeight: 700, color: C.textPrimary, marginBottom: 14 }}>
               From breakdown to <span style={{ color: C.amber }}>fixed</span> in minutes
