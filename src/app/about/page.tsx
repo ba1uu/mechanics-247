@@ -169,7 +169,7 @@ export default function AboutPage() {
               { icon: "🤝", title: "Fairness", desc: "We empower mechanics to earn more, work freely, and grow their income." },
               { icon: "🚀", title: "Innovation", desc: "AI-powered matching, live tracking, and smart diagnostics — built in India." },
             ].map((v, i) => (
-              <Card key={i} className="values-card" style={{ textAlign: "center", padding: 28 }}>
+              <Card key={i} style={{ textAlign: "center", padding: 28 }}>
                 <div style={{ fontSize: 36, marginBottom: 12 }}>{v.icon}</div>
                 <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 8 }}>{v.title}</div>
                 <div style={{ fontSize: 13, color: C.textSecondary, lineHeight: 1.6 }}>{v.desc}</div>
