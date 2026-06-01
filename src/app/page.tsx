@@ -519,6 +519,7 @@ export default function Home() {
               { name: "K. Naveen", role: "Co-Founder", init: "KN", bio: "Driving growth and operations, ensuring every driver gets help when they need it most" },
               { name: "K. Sai Praneeth", role: "Co-Founder", init: "SP", bio: "Focused on mechanic partnerships and quality assurance across all service categories" },
               { name: "P. Rajendra", role: "Co-Founder", init: "PR", bio: "Leading customer experience and expanding Mechanics 24/7 to new cities across India" },
+{ name: "P. Narasimha", role: "Co-Founder", init: "PN", bio: "Strengthening community outreach and mechanic welfare across the Mechanics 24/7 network" },
             ].map((f, i) => (
               <div key={i} style={{ background: C.cream, borderRadius: 20, padding: 32, textAlign: "center", transition: "all .2s" }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.transform = "translateY(-4px)"; (e.currentTarget as HTMLElement).style.boxShadow = "0 16px 40px rgba(92,46,10,.1)"; }}
@@ -571,7 +572,7 @@ export default function Home() {
               {/* Founders credit */}
               <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(245,158,42,.08)", border: "1px solid rgba(245,158,42,.15)", borderRadius: 8 }}>
                 <div style={{ fontSize: 11, color: "rgba(255,255,255,.35)", letterSpacing: .5, marginBottom: 4 }}>FOUNDED BY</div>
-                <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", fontWeight: 600 }}>K. Sai Charan · K. Balamuralikrishna · K. Naveen · K. Sai Praneeth · P. Rajendra</div>
+                <div style={{ fontSize: 12, color: "rgba(255,255,255,.6)", fontWeight: 600 }}>K. Sai Charan · K. Balamuralikrishna · K. Naveen · K. Sai Praneeth · P. Rajendra · P. Narasimha</div>
               </div>
             </div>
             {[

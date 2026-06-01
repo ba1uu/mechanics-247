@@ -12,6 +12,7 @@ export default function AboutPage() {
     { name: "K. Naveen", role: "Co-Founder", bio: "Driving growth and operations, ensuring every driver gets help when they need it most", init: "KN" },
     { name: "K. Sai Praneeth", role: "Co-Founder", bio: "Focused on mechanic partnerships and quality assurance across all service categories", init: "SP" },
     { name: "P. Rajendra", role: "Co-Founder", bio: "Leading customer experience and expanding Mechanics 24/7 to new cities across India", init: "PR" },
+{ name: "P. Narasimha", role: "Co-Founder", bio: "Strengthening community outreach and mechanic welfare across the Mechanics 24/7 network", init: "PN" },
   ];
 
   const milestones = [
