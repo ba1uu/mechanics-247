@@ -23,10 +23,34 @@ export default function ServicesPage() {
 
   return (
     <div style={{ background: C.cream, minHeight: "100vh" }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .services-hero { padding: 100px 20px 50px !important; }
+          .services-hero h1 { font-size: 34px !important; }
+          .services-hero p { font-size: 15px !important; }
+          .services-section { padding: 40px 16px !important; }
+          .services-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .pricing-section { padding: 50px 20px !important; }
+          .pricing-grid { grid-template-columns: 1fr !important; gap: 14px !important; }
+          .pricing-h2 { font-size: 28px !important; }
+          .cta-section { padding: 50px 20px !important; }
+          .cta-h2 { font-size: 30px !important; }
+        }
+        @media (min-width: 480px) and (max-width: 768px) {
+          .services-grid { grid-template-columns: 1fr 1fr !important; }
+          .pricing-grid { grid-template-columns: 1fr 1fr 1fr !important; }
+        }
+        @media (min-width: 768px) and (max-width: 1100px) {
+          .services-grid { grid-template-columns: repeat(2,1fr) !important; }
+          .services-section { padding: 50px 30px !important; }
+          .services-hero { padding: 110px 30px 60px !important; }
+        }
+      `}</style>
+
       <Navbar />
 
       {/* Hero */}
-      <section style={{ background: `linear-gradient(135deg, ${C.cream2}, ${C.cream})`, padding: "120px 60px 60px", textAlign: "center" }}>
+      <section className="services-hero" style={{ background: `linear-gradient(135deg, ${C.cream2}, ${C.cream})`, padding: "120px 60px 60px", textAlign: "center" }}>
         <div style={{ maxWidth: 700, margin: "0 auto" }}>
           <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 11, fontWeight: 600, letterSpacing: 3, color: C.amber, display: "block", marginBottom: 12 }}>WHAT WE OFFER</span>
           <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 52, fontWeight: 700, color: C.textPrimary, marginBottom: 16 }}>
@@ -39,9 +63,9 @@ export default function ServicesPage() {
       </section>
 
       {/* Services grid */}
-      <section style={{ padding: "60px", background: C.white }}>
+      <section className="services-section" style={{ padding: "60px", background: C.white }}>
         <div style={{ maxWidth: 1280, margin: "0 auto" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+          <div className="services-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
             {services.map((s, i) => (
               <Card key={i} style={{ transition: "all .2s" }} onClick={() => router.push("/register")}>
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 16, marginBottom: 16 }}>
@@ -60,7 +84,7 @@ export default function ServicesPage() {
                     <span key={f} style={{ padding: "3px 10px", background: C.cream2, borderRadius: 20, fontSize: 11, color: C.textSecondary }}>✓ {f}</span>
                   ))}
                 </div>
-                <button onClick={() => router.push("/register")} style={{ width: "100%", padding: "10px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: 1 }}>
+                <button onClick={(e) => { e.stopPropagation(); router.push("/register"); }} style={{ width: "100%", padding: "10px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer", letterSpacing: 1 }}>
                   BOOK NOW →
                 </button>
               </Card>
@@ -70,15 +94,15 @@ export default function ServicesPage() {
       </section>
 
       {/* Pricing note */}
-      <section style={{ padding: "60px", background: C.cream2 }}>
+      <section className="pricing-section" style={{ padding: "60px", background: C.cream2 }}>
         <div style={{ maxWidth: 900, margin: "0 auto", textAlign: "center" }}>
-          <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 36, fontWeight: 700, color: C.textPrimary, marginBottom: 16 }}>
+          <h2 className="pricing-h2" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 36, fontWeight: 700, color: C.textPrimary, marginBottom: 16 }}>
             Transparent Pricing, <span style={{ color: C.amber }}>Always</span>
           </h2>
           <p style={{ fontSize: 15, color: C.textSecondary, lineHeight: 1.7, marginBottom: 40 }}>
             You see the price estimate before confirming. No surprise charges. A detailed invoice is generated after every job.
           </p>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
+          <div className="pricing-grid" style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 20 }}>
             {[
               { icon: "💰", title: "Upfront Estimate", desc: "See price range before booking" },
               { icon: "🧾", title: "Detailed Invoice", desc: "Labour + parts breakdown always" },
@@ -95,8 +119,8 @@ export default function ServicesPage() {
       </section>
 
       {/* CTA */}
-      <section style={{ padding: "60px", background: C.brown, textAlign: "center" }}>
-        <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: "white", marginBottom: 16 }}>Need Help Right Now?</h2>
+      <section className="cta-section" style={{ padding: "60px", background: C.brown, textAlign: "center" }}>
+        <h2 className="cta-h2" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: "white", marginBottom: 16 }}>Need Help Right Now?</h2>
         <p style={{ fontSize: 16, color: "rgba(255,255,255,.7)", marginBottom: 32 }}>Register and get a verified mechanic in under 8 minutes</p>
         <button onClick={() => router.push("/register")} style={{ padding: "16px 40px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, cursor: "pointer", letterSpacing: 1 }}>
           🆘 GET HELP NOW

@@ -48,10 +48,27 @@ export default function LoginPage() {
 
   return (
     <div style={{ background: C.cream, minHeight: "100vh" }}>
+      <style>{`
+        @media (max-width: 768px) {
+          .login-grid { grid-template-columns: 1fr !important; }
+          .login-left-panel { display: none !important; }
+          .login-right-panel { padding: 100px 20px 40px !important; }
+          .login-form-inner { max-width: 100% !important; }
+          .otp-input { width: 40px !important; height: 46px !important; font-size: 18px !important; }
+          .login-title { font-size: 26px !important; }
+          .tab-label { font-size: 11px !important; padding: 9px 4px !important; }
+        }
+        @media (max-width: 380px) {
+          .otp-input { width: 34px !important; height: 40px !important; font-size: 16px !important; }
+          .login-right-panel { padding: 90px 16px 40px !important; }
+        }
+      `}</style>
+
       <Navbar />
-      <div style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", paddingTop: 64 }}>
-        {/* Left panel */}
-        <div style={{ background: C.brown, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, position: "relative", overflow: "hidden" }}>
+      <div className="login-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", paddingTop: 64 }}>
+
+        {/* Left panel — hidden on mobile */}
+        <div className="login-left-panel" style={{ background: C.brown, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(circle at 30% 40%,rgba(224,123,26,.15) 0%,transparent 60%)` }} />
           <div style={{ position: "relative", zIndex: 2, textAlign: "center", color: "white" }}>
             <div style={{ fontSize: 80, marginBottom: 24, animation: "float 3s ease-in-out infinite" }}>🔧</div>
@@ -68,15 +85,16 @@ export default function LoginPage() {
         </div>
 
         {/* Right panel */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
-          <div style={{ width: "100%", maxWidth: 440 }}>
-            <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Sign In</h1>
+        <div className="login-right-panel" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
+          <div className="login-form-inner" style={{ width: "100%", maxWidth: 440 }}>
+            <h1 className="login-title" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Sign In</h1>
             <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 32 }}>Don't have an account? <a href="/register" style={{ color: C.amber, fontWeight: 600 }}>Register here</a></p>
 
             {/* Role tabs */}
             <div style={{ display: "flex", background: C.cream2, borderRadius: 10, padding: 4, marginBottom: 28 }}>
               {(["customer", "mechanic", "admin"] as const).map(t => (
                 <button key={t} onClick={() => { setTab(t); setError(""); }}
+                  className="tab-label"
                   style={{ flex: 1, padding: "10px", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, letterSpacing: .5, cursor: "pointer", transition: "all .2s", background: tab === t ? C.amber : "transparent", color: tab === t ? "white" : C.textSecondary, textTransform: "uppercase" }}>
                   {t}
                 </button>
@@ -129,6 +147,7 @@ export default function LoginPage() {
                   <div style={{ display: "flex", gap: 8, justifyContent: "center" }}>
                     {otp.map((digit, i) => (
                       <input key={i} id={`otp-${i}`} value={digit} onChange={e => handleOtpChange(i, e.target.value)} maxLength={1}
+                        className="otp-input"
                         style={{ width: 48, height: 52, textAlign: "center", border: `2px solid ${digit ? C.amber : C.border}`, borderRadius: 8, fontSize: 20, fontWeight: 700, fontFamily: "'Oswald',sans-serif", background: C.cream, outline: "none" }} />
                     ))}
                   </div>
