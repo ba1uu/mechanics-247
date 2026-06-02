@@ -18,6 +18,11 @@ export default function LoginPage() {
   const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }));
 
   const handleLogin = async () => {
+    if (!form.email || !form.password) {
+      setError("Please enter your email and password.");
+      return;
+    }
+
     setLoading(true);
     setError("");
 
@@ -35,7 +40,19 @@ export default function LoginPage() {
         password: form.password,
       });
 
-      if (authError) throw new Error(authError.message);
+      if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          throw new Error("Wrong email or password. Please try again.");
+        }
+        if (authError.message.includes("Email not confirmed")) {
+          throw new Error("Please verify your email before logging in.");
+        }
+        throw new Error(authError.message);
+      }
+
+      if (!authData?.user?.id) {
+        throw new Error("Login failed. Please try again.");
+      }
 
       // Fetch profile
       const { data: profile, error: profileError } = await supabase
@@ -44,25 +61,40 @@ export default function LoginPage() {
         .eq("id", authData.user.id)
         .single();
 
-      if (profileError || !profile) throw new Error("Profile not found. Please register first.");
+      if (profileError || !profile) {
+        throw new Error("Profile not found. Please register first.");
+      }
+
+      if (!profile.role) {
+        throw new Error("Account setup incomplete. Please contact support.");
+      }
 
       if (tab !== "admin" && profile.role !== tab) {
-        throw new Error(`This account is a ${profile.role} account, not ${tab}.`);
+        throw new Error(`This is a ${profile.role} account. Please select the "${profile.role}" tab to login.`);
       }
 
       store.setUser({
         id: profile.id,
-        name: profile.name,
-        email: profile.email,
-        phone: profile.phone,
+        name: profile.name || "",
+        email: profile.email || form.email,
+        phone: profile.phone || "",
         role: profile.role,
-        city: profile.city,
+        city: profile.city || "",
       });
 
-      router.push(`/${profile.role}/dashboard`);
+      // Safe redirect based on role
+      const roleRoutes: Record<string, string> = {
+        customer: "/customer/dashboard",
+        mechanic: "/mechanic/dashboard",
+        admin: "/admin/dashboard",
+      };
 
-    } catch (err: any) {
-      setError(err.message || "Login failed. Please try again.");
+      const destination = roleRoutes[profile.role] || "/";
+      router.push(destination);
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Login failed. Please try again.";
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -93,6 +125,7 @@ export default function LoginPage() {
       <Navbar />
       <div className="login-grid" style={{ minHeight: "100vh", display: "grid", gridTemplateColumns: "1fr 1fr", paddingTop: 64 }}>
 
+        {/* Left Panel */}
         <div className="login-left-panel" style={{ background: C.brown, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 60, position: "relative", overflow: "hidden" }}>
           <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(circle at 30% 40%,rgba(224,123,26,.15) 0%,transparent 60%)` }} />
           <div style={{ position: "relative", zIndex: 2, textAlign: "center", color: "white" }}>
@@ -109,11 +142,16 @@ export default function LoginPage() {
           </div>
         </div>
 
+        {/* Right Panel */}
         <div className="login-right-panel" style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: 60 }}>
           <div className="login-form-inner" style={{ width: "100%", maxWidth: 440 }}>
             <h1 className="login-title" style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Sign In</h1>
-            <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 32 }}>Don't have an account? <a href="/register" style={{ color: C.amber, fontWeight: 600 }}>Register here</a></p>
+            <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 32 }}>
+              Don&apos;t have an account?{" "}
+              <a href="/register" style={{ color: C.amber, fontWeight: 600 }}>Register here</a>
+            </p>
 
+            {/* Tab selector */}
             <div style={{ display: "flex", background: C.cream2, borderRadius: 10, padding: 4, marginBottom: 28 }}>
               {(["customer", "mechanic", "admin"] as const).map(t => (
                 <button key={t} onClick={() => { setTab(t); setError(""); }}
@@ -160,7 +198,7 @@ export default function LoginPage() {
                 </button>
 
                 <div style={{ textAlign: "center" }}>
-                  <a href="#" style={{ fontSize: 13, color: C.amber, fontWeight: 600 }}>Forgot Password?</a>
+                  <a href="/forgot-password" style={{ fontSize: 13, color: C.amber, fontWeight: 600 }}>Forgot Password?</a>
                 </div>
               </div>
             ) : (
