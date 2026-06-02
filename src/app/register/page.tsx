@@ -60,13 +60,27 @@ export default function RegisterPage() {
         password: personal.password,
       });
 
-      if (authError) throw new Error(authError.message);
+      if (authError) {
+        // Handle specific auth errors cleanly
+        if (
+          authError.message.toLowerCase().includes("already registered") ||
+          authError.message.toLowerCase().includes("already been registered") ||
+          authError.message.toLowerCase().includes("user already exists") ||
+          authError.message.toLowerCase().includes("duplicate")
+        ) {
+          setServerError("This email is already registered. Please login instead.");
+          setStep(1); // Send them back to step 1
+          setLoading(false);
+          return;
+        }
+        throw new Error(authError.message);
+      }
 
       const userId = authData.user?.id;
-      if (!userId) throw new Error("Failed to create user");
+      if (!userId) throw new Error("Failed to create user. Please try again.");
 
-      // 2. Save profile
-      const { error: profileError } = await supabase.from("profiles").insert({
+      // 2. Save profile — use upsert so it never throws duplicate key
+      const { error: profileError } = await supabase.from("profiles").upsert({
         id: userId,
         name: personal.name,
         phone: personal.phone,
@@ -74,9 +88,14 @@ export default function RegisterPage() {
         role: "customer",
         city: address.city,
         state: address.state,
-      });
+      }, { onConflict: "id" });
 
-      if (profileError) throw new Error(profileError.message);
+      if (profileError) {
+        // If duplicate email in profiles, still proceed — auth user was created
+        if (!profileError.message.toLowerCase().includes("duplicate")) {
+          throw new Error(profileError.message);
+        }
+      }
 
       // 3. Save vehicle if provided
       if (vehicle.type) {
@@ -103,8 +122,9 @@ export default function RegisterPage() {
 
       router.push("/customer/dashboard");
 
-    } catch (err: any) {
-      setServerError(err.message || "Registration failed. Please try again.");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Registration failed. Please try again.";
+      setServerError(message);
     } finally {
       setLoading(false);
     }
@@ -119,6 +139,18 @@ export default function RegisterPage() {
 
   return (
     <div style={{ background: C.cream, minHeight: "100vh" }}>
+      <style>{`
+        .step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Oswald', sans-serif; font-size: 13px; font-weight: 700; }
+        .step-dot.done { background: ${C.amber}; color: white; }
+        .step-dot.active { background: ${C.amber}; color: white; box-shadow: 0 0 0 4px rgba(224,123,26,.2); }
+        .step-dot.pending { background: ${C.cream2}; color: ${C.textMuted}; border: 2px solid ${C.border}; }
+        @media (max-width: 600px) {
+          .register-card { padding: 24px 16px !important; }
+          .register-grid { grid-template-columns: 1fr !important; }
+          .step-label { display: none; }
+        }
+      `}</style>
+
       <Navbar />
       <div style={{ maxWidth: 720, margin: "0 auto", padding: "80px 24px 60px" }}>
         <div style={{ textAlign: "center", marginBottom: 40 }}>
@@ -134,14 +166,14 @@ export default function RegisterPage() {
                 <div className={`step-dot ${step > s.num ? "done" : step === s.num ? "active" : "pending"}`}>
                   {step > s.num ? "✓" : s.num}
                 </div>
-                <span style={{ fontSize: 11, color: step >= s.num ? C.amberDark : C.textMuted, fontWeight: 600, fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>{s.label}</span>
+                <span className="step-label" style={{ fontSize: 11, color: step >= s.num ? C.amberDark : C.textMuted, fontWeight: 600, fontFamily: "'Oswald',sans-serif", whiteSpace: "nowrap" }}>{s.label}</span>
               </div>
               {i < steps.length - 1 && <div style={{ flex: 1, height: 2, background: step > s.num ? C.amber : C.border, margin: "0 8px", marginBottom: 20 }} />}
             </div>
           ))}
         </div>
 
-        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "36px 40px" }}>
+        <div className="register-card" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "36px 40px" }}>
 
           {/* STEP 1 */}
           {step === 1 && (
@@ -153,7 +185,7 @@ export default function RegisterPage() {
                 </div>
               </div>
               <p style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginTop: -12 }}>Click to upload profile photo</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="register-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div style={{ gridColumn: "1 / -1" }}>
                   <Input label="Full Name" value={personal.name} onChange={v => setP("name", v)} placeholder="Enter your full name" required />
                   {errors.name && <span style={{ fontSize: 12, color: C.red }}>{errors.name}</span>}
@@ -182,7 +214,7 @@ export default function RegisterPage() {
           {step === 2 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Your Address</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="register-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
                   <Input label="State" type="select" value={address.state} onChange={v => setA("state", v)} options={STATES} required />
                   {errors.state && <span style={{ fontSize: 12, color: C.red }}>{errors.state}</span>}
@@ -207,7 +239,7 @@ export default function RegisterPage() {
             <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Vehicle Information</h2>
               <p style={{ fontSize: 13, color: C.textMuted }}>Optional — you can add vehicles later from your dashboard</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="register-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div><Input label="Vehicle Type" type="select" value={vehicle.type} onChange={v => setV("type", v)} options={VEHICLE_TYPES} /></div>
                 <div><Input label="Vehicle Brand" type="select" value={vehicle.brand} onChange={v => setV("brand", v)} options={BRANDS} /></div>
                 <div><Input label="Vehicle Model" value={vehicle.model} onChange={v => setV("model", v)} placeholder="e.g. Swift, Activa" /></div>
@@ -217,16 +249,14 @@ export default function RegisterPage() {
             </div>
           )}
 
-          {/* STEP 4 — Confirm (no OTP) */}
+          {/* STEP 4 */}
           {step === 4 && (
             <div style={{ display: "flex", flexDirection: "column", gap: 20, alignItems: "center" }}>
               <div style={{ fontSize: 56 }}>✅</div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 600, color: C.textPrimary }}>Almost Done!</h2>
               <p style={{ fontSize: 14, color: C.textSecondary, textAlign: "center", maxWidth: 380 }}>
-                Review your details and click <strong>Create Account</strong> to complete your registration.
+                Review your details and click <strong>Create Account</strong> to complete registration.
               </p>
-
-              {/* Summary */}
               <div style={{ width: "100%", background: C.cream2, borderRadius: 12, padding: 20, display: "flex", flexDirection: "column", gap: 10 }}>
                 {[
                   { label: "Name", value: personal.name },
@@ -234,14 +264,16 @@ export default function RegisterPage() {
                   { label: "Phone", value: personal.phone },
                   { label: "City", value: `${address.city}, ${address.state}` },
                   vehicle.type ? { label: "Vehicle", value: `${vehicle.brand} ${vehicle.model} (${vehicle.type})` } : null,
-                ].filter(Boolean).map((row: any) => (
-                  <div key={row.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
-                    <span style={{ color: C.textMuted }}>{row.label}</span>
-                    <span style={{ color: C.textPrimary, fontWeight: 600 }}>{row.value}</span>
-                  </div>
-                ))}
+                ].filter(Boolean).map((row) => {
+                  const r = row as { label: string; value: string };
+                  return (
+                    <div key={r.label} style={{ display: "flex", justifyContent: "space-between", fontSize: 14 }}>
+                      <span style={{ color: C.textMuted }}>{r.label}</span>
+                      <span style={{ color: C.textPrimary, fontWeight: 600 }}>{r.value}</span>
+                    </div>
+                  );
+                })}
               </div>
-
               <div style={{ background: "#fffbea", border: "1px solid #f59e0b", borderRadius: 8, padding: "10px 16px", fontSize: 12, color: "#92400e", textAlign: "center" }}>
                 📱 Phone OTP verification coming soon
               </div>
@@ -250,8 +282,13 @@ export default function RegisterPage() {
 
           {/* Server error */}
           {serverError && (
-            <div style={{ marginTop: 16, background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 12, fontSize: 13, color: "#c0392b" }}>
-              ⚠️ {serverError}
+            <div style={{ marginTop: 16, background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 14, fontSize: 13, color: "#c0392b", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>⚠️ {serverError}</div>
+              {serverError.includes("already registered") && (
+                <a href="/login" style={{ color: "#c0392b", fontWeight: 700, textDecoration: "underline", fontSize: 13 }}>
+                  → Click here to login instead
+                </a>
+              )}
             </div>
           )}
 
