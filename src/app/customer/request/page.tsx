@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { C, Btn, Card } from "@/components/ui";
 import { store } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const ISSUES = ["Puncture", "Battery Dead", "Engine Problem", "Fuel Empty", "Electrical Issue", "Accident Support", "Brake Failure", "AC Problem", "Locked Out", "Need Towing", "Other"];
 const VEHICLE_TYPES = [
@@ -29,6 +30,9 @@ export default function CustomerRequest() {
   const [review, setReview] = useState("");
   const [payMethod, setPayMethod] = useState("UPI");
   const [paid, setPaid] = useState(false);
+  const [bookingId, setBookingId] = useState("");
+  const [bookingError, setBookingError] = useState("");
+  const [bookingLoading, setBookingLoading] = useState(false);
 
   const set = (k: string, v: string) => setSelected(s => ({ ...s, [k]: v }));
 
@@ -39,18 +43,62 @@ export default function CustomerRequest() {
 
   const steps = ["Select Vehicle", "Describe Issue", "Your Location", "Find Mechanic", "Confirm", "Track Live", "Payment", "Review"];
 
-  const confirmBooking = () => {
-    store.addBooking({
-      id: "BK" + Date.now().toString().slice(-6),
-      vehicleId: "v1",
-      issue: selected.issue,
-      status: "accepted",
-      mechanic: selected.mechanic || "Rajesh Kumar",
-      amount: 499,
-      date: new Date().toISOString().split("T")[0],
-      location: selected.location,
-    });
-    setStep(6);
+  const confirmBooking = async () => {
+    setBookingLoading(true);
+    setBookingError("");
+
+    try {
+      const user = store.getUser();
+
+      // Save booking to Supabase
+      const { data, error } = await supabase
+        .from("bookings")
+        .insert({
+          customer_id: user?.id || null,
+          service: selected.issue,
+          status: "accepted",
+          location_address: selected.location,
+          price: 499,
+        })
+        .select()
+        .single();
+
+      if (error) throw new Error(error.message);
+
+      // Save to local store as well
+      store.addBooking({
+        id: data.id,
+        vehicleId: "v1",
+        issue: selected.issue,
+        status: "accepted",
+        mechanic: selected.mechanic || "Rajesh Kumar",
+        amount: 499,
+        date: new Date().toISOString().split("T")[0],
+        location: selected.location,
+      });
+
+      setBookingId(data.id);
+      setStep(6);
+
+    } catch (err: any) {
+      // Fallback to local store if Supabase fails
+      const localId = "BK" + Date.now().toString().slice(-6);
+      store.addBooking({
+        id: localId,
+        vehicleId: "v1",
+        issue: selected.issue,
+        status: "accepted",
+        mechanic: selected.mechanic || "Rajesh Kumar",
+        amount: 499,
+        date: new Date().toISOString().split("T")[0],
+        location: selected.location,
+      });
+      setBookingId(localId);
+      setBookingError("Saved locally — sync issue: " + err.message);
+      setStep(6);
+    } finally {
+      setBookingLoading(false);
+    }
   };
 
   return (
@@ -81,7 +129,7 @@ export default function CustomerRequest() {
 
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "32px 24px" }}>
 
-        {/* STEP 1: Select Vehicle */}
+        {/* STEP 1 */}
         {step === 1 && (
           <div style={{ animation: "slide-up .3s ease" }}>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Select Vehicle Type</h2>
@@ -106,7 +154,7 @@ export default function CustomerRequest() {
           </div>
         )}
 
-        {/* STEP 2: Issue */}
+        {/* STEP 2 */}
         {step === 2 && (
           <div style={{ animation: "slide-up .3s ease" }}>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>What's the Problem?</h2>
@@ -123,13 +171,8 @@ export default function CustomerRequest() {
             <div style={{ marginBottom: 20 }}>
               <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 8 }}>ADDITIONAL DESCRIPTION</label>
               <textarea value={selected.desc} onChange={e => set("desc", e.target.value)}
-                placeholder="Describe the problem in detail... (e.g. car won't start, makes clicking sound)"
+                placeholder="Describe the problem in detail..."
                 rows={4} style={{ width: "100%", padding: "12px 14px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, background: C.cream, resize: "vertical" }} />
-            </div>
-            <div className="upload-zone" style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 28, marginBottom: 8 }}>📷</div>
-              <div style={{ fontSize: 14, fontWeight: 500, color: C.textSecondary }}>Upload Photos (Optional)</div>
-              <div style={{ fontSize: 12, color: C.textMuted }}>Drag & drop or click to upload up to 3 photos</div>
             </div>
             <div style={{ display: "flex", gap: 12 }}>
               <Btn variant="secondary" onClick={() => setStep(1)}>← Back</Btn>
@@ -138,12 +181,11 @@ export default function CustomerRequest() {
           </div>
         )}
 
-        {/* STEP 3: Location */}
+        {/* STEP 3 */}
         {step === 3 && (
           <div style={{ animation: "slide-up .3s ease" }}>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Confirm Your Location</h2>
             <p style={{ color: C.textSecondary, marginBottom: 24 }}>We'll send the mechanic to this address</p>
-
             <div style={{ background: "#e8dcc8", borderRadius: 16, height: 260, marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
               <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(224,123,26,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(224,123,26,.05) 1px,transparent 1px)", backgroundSize: "40px 40px" }} />
               <div style={{ textAlign: "center", position: "relative", zIndex: 2 }}>
@@ -152,7 +194,6 @@ export default function CustomerRequest() {
                 <div style={{ fontSize: 14, color: C.textSecondary }}>{selected.location}</div>
               </div>
             </div>
-
             <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <input value={selected.location} onChange={e => set("location", e.target.value)}
                 style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, background: C.cream }} />
@@ -168,17 +209,17 @@ export default function CustomerRequest() {
           </div>
         )}
 
-        {/* STEP 4: AI Matching */}
+        {/* STEP 4 */}
         {step === 4 && (
           <div style={{ animation: "slide-up .3s ease", textAlign: scanning ? "center" : "left" }}>
             {scanning ? (
               <div style={{ padding: "40px 0" }}>
                 <div style={{ fontSize: 72, marginBottom: 24, animation: "float 1.5s ease-in-out infinite" }}>🔍</div>
                 <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 12 }}>Finding Mechanics...</h2>
-                <p style={{ color: C.textSecondary, marginBottom: 32 }}>Scanning {14} verified mechanics nearby</p>
+                <p style={{ color: C.textSecondary, marginBottom: 32 }}>Scanning verified mechanics nearby</p>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
                   {["📡 Scanning area...", "⭐ Checking ratings...", "🕒 Calculating ETA...", "✅ Matching skills..."].map((t, i) => (
-                    <span key={i} style={{ padding: "6px 14px", background: C.cream2, borderRadius: 20, fontSize: 12, color: C.textSecondary, animation: `fade-in .3s ease ${i * .3}s both` }}>{t}</span>
+                    <span key={i} style={{ padding: "6px 14px", background: C.cream2, borderRadius: 20, fontSize: 12, color: C.textSecondary }}>{t}</span>
                   ))}
                 </div>
               </div>
@@ -208,7 +249,7 @@ export default function CustomerRequest() {
                         </div>
                       </div>
                       {selected.mechanic === m.name && (
-                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}`, display: "flex", gap: 8 }}>
+                        <div style={{ marginTop: 12, paddingTop: 12, borderTop: `1px solid ${C.border}` }}>
                           <span style={{ fontSize: 12, color: C.amber, fontWeight: 600 }}>✓ Selected</span>
                         </div>
                       )}
@@ -224,7 +265,7 @@ export default function CustomerRequest() {
           </div>
         )}
 
-        {/* STEP 5: Confirm */}
+        {/* STEP 5 */}
         {step === 5 && (
           <div style={{ animation: "slide-up .3s ease" }}>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Confirm Booking</h2>
@@ -244,23 +285,33 @@ export default function CustomerRequest() {
                 </div>
               ))}
             </Card>
+
+            {bookingError && (
+              <div style={{ background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 12, fontSize: 13, color: "#c0392b", marginBottom: 16 }}>
+                ⚠️ {bookingError}
+              </div>
+            )}
+
             <div style={{ background: "rgba(224,123,26,.08)", border: `1px solid rgba(224,123,26,.2)`, borderRadius: 10, padding: 14, marginBottom: 20, fontSize: 13, color: C.textSecondary }}>
               ℹ️ Final price may vary based on actual repair. You'll get a detailed invoice after service completion.
             </div>
             <div style={{ display: "flex", gap: 12 }}>
               <Btn variant="secondary" onClick={() => setStep(4)}>← Back</Btn>
-              <Btn onClick={confirmBooking} style={{ flex: 1, justifyContent: "center", padding: "14px" }}>✅ Confirm Booking</Btn>
+              <Btn onClick={confirmBooking} disabled={bookingLoading} style={{ flex: 1, justifyContent: "center", padding: "14px" }}>
+                {bookingLoading ? "⏳ Confirming..." : "✅ Confirm Booking"}
+              </Btn>
             </div>
           </div>
         )}
 
-        {/* STEP 6: Track */}
+        {/* STEP 6 */}
         {step === 6 && (
           <div style={{ animation: "slide-up .3s ease", textAlign: "center" }}>
             <div style={{ background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 20, padding: 32, marginBottom: 24 }}>
               <div style={{ fontSize: 56, marginBottom: 12 }}>✅</div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.green, marginBottom: 8 }}>Booking Confirmed!</h2>
               <p style={{ fontSize: 15, color: C.textSecondary }}>Your mechanic is on the way</p>
+              {bookingId && <p style={{ fontSize: 12, color: C.textMuted, marginTop: 8, fontFamily: "'Space Mono',monospace" }}>Booking ID: {bookingId}</p>}
             </div>
             <Card style={{ marginBottom: 20, textAlign: "left" }}>
               <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 16 }}>
@@ -301,7 +352,7 @@ export default function CustomerRequest() {
           </div>
         )}
 
-        {/* STEP 7: Payment */}
+        {/* STEP 7 */}
         {step === 7 && !paid && (
           <div style={{ animation: "slide-up .3s ease" }}>
             <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 28, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Payment</h2>
@@ -318,7 +369,6 @@ export default function CustomerRequest() {
                 <span style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.amberDark }}>₹499</span>
               </div>
             </Card>
-
             <div style={{ marginBottom: 20 }}>
               <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 600, color: C.textSecondary, marginBottom: 12, letterSpacing: .5 }}>SELECT PAYMENT METHOD</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
@@ -331,14 +381,20 @@ export default function CustomerRequest() {
                 ))}
               </div>
             </div>
-
-            <Btn onClick={() => { setPaid(true); setStep(8); }} style={{ width: "100%", justifyContent: "center", padding: "14px", fontSize: 16 }}>
+            <Btn onClick={async () => {
+              // Update booking status to completed in Supabase
+              if (bookingId && !bookingId.startsWith("BK")) {
+                await supabase.from("bookings").update({ status: "completed", price: 499 }).eq("id", bookingId);
+              }
+              setPaid(true);
+              setStep(8);
+            }} style={{ width: "100%", justifyContent: "center", padding: "14px", fontSize: 16 }}>
               💳 Pay ₹499 via {payMethod}
             </Btn>
           </div>
         )}
 
-        {/* STEP 8: Review */}
+        {/* STEP 8 */}
         {step === 8 && (
           <div style={{ animation: "slide-up .3s ease", textAlign: "center" }}>
             <div style={{ background: C.greenBg, border: `1px solid ${C.green}`, borderRadius: 20, padding: 32, marginBottom: 24 }}>
@@ -346,7 +402,6 @@ export default function CustomerRequest() {
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: C.green, marginBottom: 8 }}>Payment Successful!</h2>
               <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 16, color: C.textSecondary }}>₹499 paid · Receipt sent to {store.getUser()?.email || "your email"}</div>
             </div>
-
             <Card style={{ marginBottom: 20, textAlign: "left" }}>
               <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16, textAlign: "center" }}>Rate Your Mechanic</h3>
               <div style={{ textAlign: "center", marginBottom: 20 }}>
@@ -357,13 +412,12 @@ export default function CustomerRequest() {
                 </div>
                 {rating > 0 && <p style={{ fontSize: 14, color: C.textSecondary, marginTop: 8 }}>{["", "Poor", "Fair", "Good", "Very Good", "Excellent!"][rating]}</p>}
               </div>
-              <textarea value={review} onChange={e => setReview(e.target.value)} placeholder="Share your experience with the mechanic..."
+              <textarea value={review} onChange={e => setReview(e.target.value)} placeholder="Share your experience..."
                 rows={3} style={{ width: "100%", padding: "12px 14px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, background: C.cream, resize: "vertical" }} />
               <Btn onClick={() => router.push("/customer/dashboard")} disabled={rating === 0} style={{ width: "100%", justifyContent: "center", marginTop: 16, padding: "13px" }}>
                 Submit Review & Finish
               </Btn>
             </Card>
-
             <button onClick={() => router.push("/customer/dashboard")} style={{ background: "none", border: "none", color: C.amber, cursor: "pointer", fontSize: 14, fontWeight: 600 }}>
               Skip → Back to Dashboard
             </button>
