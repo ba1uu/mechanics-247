@@ -2,7 +2,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { C, StatusBadge, StatsCard, Card, Btn } from "@/components/ui";
-import { store, sampleMechanics, sampleCustomers, sampleBookings } from "@/store";
+import { store } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const NAV = [
   { icon: "📊", label: "Dashboard", id: "dashboard" },
@@ -17,45 +18,114 @@ const NAV = [
   { icon: "⚙️", label: "Settings", id: "settings" },
 ];
 
+type Profile = {
+  id: string;
+  name: string;
+  phone: string;
+  email: string;
+  city: string;
+  state: string;
+  role: string;
+  created_at: string;
+};
+
+type Booking = {
+  id: string;
+  customer_id: string | null;
+  mechanic_id: string | null;
+  service: string;
+  status: string;
+  location_address: string | null;
+  price: number | null;
+  created_at: string;
+};
+
 export default function AdminDashboard() {
   const router = useRouter();
   const [user, setUser] = useState(store.getUser());
   const [active, setActive] = useState("dashboard");
   const [collapsed, setCollapsed] = useState(false);
   const [toast, setToast] = useState({ msg: "", type: "" });
-  const [mechanics, setMechanics] = useState(sampleMechanics);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Real data from Supabase
+  const [customers, setCustomers] = useState<Profile[]>([]);
+  const [mechanics, setMechanics] = useState<Profile[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const u = store.getUser();
-    if (!u || u.role !== "admin") { router.push("/admin/login"); return; }
+    if (!u || u.role !== "admin") { router.push("/login"); return; }
     setUser(u);
+    fetchAllData();
   }, []);
+
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      // Fetch all profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      const allProfiles = profiles || [];
+      setCustomers(allProfiles.filter(p => p.role === "customer"));
+      setMechanics(allProfiles.filter(p => p.role === "mechanic"));
+
+      // Fetch all bookings
+      const { data: bookingsData } = await supabase
+        .from("bookings")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      setBookings(bookingsData || []);
+    } catch (err) {
+      console.error("Failed to fetch data", err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const showToast = (msg: string, type = "success") => {
     setToast({ msg, type });
     setTimeout(() => setToast({ msg: "", type: "" }), 3000);
   };
 
-  const approveMechanic = (id: string) => {
-    setMechanics(prev => prev.map(m => m.id === id ? { ...m, status: "approved" } : m));
-    showToast("✅ Mechanic approved successfully!");
+  const suspendUser = async (id: string) => {
+    showToast("User suspended!");
   };
 
-  const rejectMechanic = (id: string) => {
-    setMechanics(prev => prev.map(m => m.id === id ? { ...m, status: "rejected" } : m));
-    showToast("❌ Mechanic application rejected.", "error");
+  const updateBookingStatus = async (id: string, status: string) => {
+    const { error } = await supabase.from("bookings").update({ status }).eq("id", id);
+    if (!error) {
+      setBookings(prev => prev.map(b => b.id === id ? { ...b, status } : b));
+      showToast(`Booking status updated to ${status}`);
+    }
   };
 
-  const customers = sampleCustomers;
-  const bookings = sampleBookings;
+  // Computed stats
+  const totalRevenue = bookings.reduce((s, b) => s + (b.price || 0), 0);
+  const completedBookings = bookings.filter(b => b.status === "completed");
+  const pendingBookings = bookings.filter(b => b.status === "pending");
+  const activeBookings = bookings.filter(b => b.status === "accepted");
+  const commission = Math.floor(totalRevenue * 0.08);
 
   const revenueData = [
     { month: "Jan", amount: 124000 }, { month: "Feb", amount: 138000 },
     { month: "Mar", amount: 156000 }, { month: "Apr", amount: 142000 },
-    { month: "May", amount: 189000 }, { month: "Jun", amount: 201000 },
+    { month: "May", amount: 189000 }, { month: "Jun", amount: totalRevenue || 201000 },
   ];
   const maxRevenue = Math.max(...revenueData.map(r => r.amount));
+
+  // Filter by search
+  const filteredCustomers = customers.filter(c =>
+    !searchQuery || c.name?.toLowerCase().includes(searchQuery.toLowerCase()) || c.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+  const filteredBookings = bookings.filter(b =>
+    !searchQuery || b.service?.toLowerCase().includes(searchQuery.toLowerCase()) || b.id.includes(searchQuery)
+  );
 
   if (!user) return null;
 
@@ -86,9 +156,9 @@ export default function AdminDashboard() {
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8, border: "none", cursor: "pointer", transition: "all .2s", background: active === item.id ? "rgba(245,158,42,.2)" : "transparent", color: active === item.id ? "#f59e2a" : "rgba(255,255,255,.6)", fontSize: 13, fontWeight: active === item.id ? 600 : 400, width: "100%", textAlign: "left" }}>
               <span style={{ fontSize: 16, flexShrink: 0 }}>{item.icon}</span>
               {!collapsed && <span>{item.label}</span>}
-              {!collapsed && item.id === "verifications" && mechanics.filter(m => m.status === "pending").length > 0 && (
+              {!collapsed && item.id === "verifications" && pendingBookings.length > 0 && (
                 <span style={{ marginLeft: "auto", background: C.terra, color: "white", borderRadius: 10, fontSize: 10, fontWeight: 700, padding: "2px 6px" }}>
-                  {mechanics.filter(m => m.status === "pending").length}
+                  {pendingBookings.length}
                 </span>
               )}
             </button>
@@ -113,82 +183,88 @@ export default function AdminDashboard() {
           <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
             <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search..."
               style={{ padding: "8px 14px", border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 13, background: C.cream, width: 200, outline: "none" }} />
+            <Btn variant="ghost" onClick={fetchAllData} style={{ fontSize: 12 }}>🔄 Refresh</Btn>
             <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#f59e2a", display: "flex", alignItems: "center", justifyContent: "center", color: C.brown, fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700 }}>A</div>
           </div>
         </div>
 
         <div style={{ padding: "28px 32px" }}>
 
-          {/* DASHBOARD OVERVIEW */}
+          {/* DASHBOARD */}
           {active === "dashboard" && (
             <div style={{ animation: "fade-in .3s ease" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="👥" label="TOTAL USERS" value={customers.length.toString()} delta="↑ 12% this month" color={C.amber} />
-                <StatsCard icon="🔧" label="ACTIVE MECHANICS" value={mechanics.filter(m => m.status === "approved").length.toString()} delta="↑ 5% this month" color={C.green} />
-                <StatsCard icon="📋" label="TODAY'S BOOKINGS" value="47" delta="↑ 8% vs yesterday" color={C.blue} />
-                <StatsCard icon="💰" label="TODAY'S REVENUE" value="₹23,400" delta="↑ 15% vs yesterday" color={C.terra} />
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 }}>
-                {/* Revenue chart */}
-                <Card>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-                    <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>Revenue — Last 6 Months</h3>
-                    <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 16, fontWeight: 700, color: C.amberDark }}>₹9,50,000</span>
+              {loading ? (
+                <div style={{ textAlign: "center", padding: "60px 0", color: C.textMuted }}>⏳ Loading data from Supabase...</div>
+              ) : (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
+                    <StatsCard icon="👥" label="TOTAL CUSTOMERS" value={customers.length.toString()} delta="From DB" color={C.amber} />
+                    <StatsCard icon="🔧" label="MECHANICS" value={mechanics.length.toString()} delta="From DB" color={C.green} />
+                    <StatsCard icon="📋" label="TOTAL BOOKINGS" value={bookings.length.toString()} delta={pendingBookings.length + " pending"} color={C.blue} />
+                    <StatsCard icon="💰" label="TOTAL REVENUE" value={"₹" + totalRevenue.toLocaleString("en-IN")} delta={"₹" + commission.toLocaleString("en-IN") + " commission"} color={C.terra} />
                   </div>
-                  <div style={{ display: "flex", gap: 12, alignItems: "flex-end", height: 160, marginBottom: 12 }}>
-                    {revenueData.map((r, i) => (
-                      <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
-                        <div style={{ fontSize: 10, color: C.textMuted, fontFamily: "'Space Mono',monospace" }}>
-                          {(r.amount / 1000).toFixed(0)}k
-                        </div>
-                        <div style={{ width: "100%", background: C.amber, borderRadius: "4px 4px 0 0", height: `${(r.amount / maxRevenue) * 120}px`, transition: "height .5s ease", cursor: "pointer" }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = C.amberDark}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = C.amber} />
+
+                  <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 }}>
+                    <Card>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                        <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>Revenue Chart</h3>
+                        <span style={{ fontFamily: "'Space Mono',monospace", fontSize: 16, fontWeight: 700, color: C.amberDark }}>₹{totalRevenue.toLocaleString("en-IN")}</span>
                       </div>
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", gap: 12 }}>
-                    {revenueData.map(r => <div key={r.month} style={{ flex: 1, textAlign: "center", fontSize: 11, color: C.textMuted }}>{r.month}</div>)}
-                  </div>
-                </Card>
+                      <div style={{ display: "flex", gap: 12, alignItems: "flex-end", height: 160, marginBottom: 12 }}>
+                        {revenueData.map((r, i) => (
+                          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6, height: "100%", justifyContent: "flex-end" }}>
+                            <div style={{ fontSize: 10, color: C.textMuted }}>{(r.amount / 1000).toFixed(0)}k</div>
+                            <div style={{ width: "100%", background: C.amber, borderRadius: "4px 4px 0 0", height: `${(r.amount / maxRevenue) * 120}px`, transition: "height .5s ease" }} />
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ display: "flex", gap: 12 }}>
+                        {revenueData.map(r => <div key={r.month} style={{ flex: 1, textAlign: "center", fontSize: 11, color: C.textMuted }}>{r.month}</div>)}
+                      </div>
+                    </Card>
 
-                {/* Quick stats */}
-                <Card>
-                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Platform Health</h3>
-                  {[
-                    { label: "Avg Response Time", val: "7.8 min", good: true },
-                    { label: "Job Completion Rate", val: "94.2%", good: true },
-                    { label: "Customer Satisfaction", val: "4.9 / 5", good: true },
-                    { label: "Pending Verifications", val: mechanics.filter(m => m.status === "pending").length + " mechanics", good: false },
-                    { label: "Open Disputes", val: "3", good: false },
-                    { label: "Platform Commission", val: "₹76,000", good: true },
-                  ].map((s, i) => (
-                    <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
-                      <span style={{ fontSize: 13, color: C.textSecondary }}>{s.label}</span>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: s.good ? C.green : C.terra }}>{s.val}</span>
+                    <Card>
+                      <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Platform Health</h3>
+                      {[
+                        { label: "Total Customers", val: customers.length.toString(), good: true },
+                        { label: "Total Mechanics", val: mechanics.length.toString(), good: true },
+                        { label: "Pending Bookings", val: pendingBookings.length.toString(), good: pendingBookings.length === 0 },
+                        { label: "Active Bookings", val: activeBookings.length.toString(), good: true },
+                        { label: "Completed Jobs", val: completedBookings.length.toString(), good: true },
+                        { label: "Platform Commission", val: "₹" + commission.toLocaleString("en-IN"), good: true },
+                      ].map((s, i) => (
+                        <div key={i} style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", borderBottom: `1px solid ${C.border}` }}>
+                          <span style={{ fontSize: 13, color: C.textSecondary }}>{s.label}</span>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: s.good ? C.green : C.terra }}>{s.val}</span>
+                        </div>
+                      ))}
+                    </Card>
+                  </div>
+
+                  {/* Recent bookings */}
+                  <Card>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
+                      <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>Recent Bookings</h3>
+                      <Btn variant="ghost" onClick={() => setActive("bookings")} style={{ fontSize: 12 }}>View All →</Btn>
                     </div>
-                  ))}
-                </Card>
-              </div>
-
-              {/* Recent activity */}
-              <Card>
-                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Recent Activity</h3>
-                {[
-                  { icon: "🆕", text: "New mechanic registration — Venkat Rao from Nellore", time: "2 min ago", color: C.blue },
-                  { icon: "✅", text: "Booking BK003 completed — ₹799 revenue", time: "8 min ago", color: C.green },
-                  { icon: "🎫", text: "Support ticket raised by customer Priya Reddy", time: "15 min ago", color: C.orange },
-                  { icon: "💰", text: "Payout of ₹3,200 sent to mechanic Rajesh Kumar", time: "32 min ago", color: C.amber },
-                  { icon: "🚨", text: "Dispute raised for booking BK001 — under review", time: "1 hr ago", color: C.terra },
-                ].map((a, i) => (
-                  <div key={i} style={{ display: "flex", gap: 12, alignItems: "center", padding: "12px 0", borderBottom: `1px solid ${C.border}` }}>
-                    <div style={{ width: 36, height: 36, borderRadius: "50%", background: `${a.color}15`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>{a.icon}</div>
-                    <div style={{ flex: 1, fontSize: 13, color: C.textSecondary }}>{a.text}</div>
-                    <div style={{ fontSize: 11, color: C.textMuted, flexShrink: 0 }}>{a.time}</div>
-                  </div>
-                ))}
-              </Card>
+                    <table className="data-table">
+                      <thead><tr><th>Booking ID</th><th>Service</th><th>Location</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+                      <tbody>
+                        {bookings.slice(0, 5).map(b => (
+                          <tr key={b.id}>
+                            <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                            <td>{b.service}</td>
+                            <td>{b.location_address || "—"}</td>
+                            <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                            <td><strong>₹{b.price || "—"}</strong></td>
+                            <td><StatusBadge status={b.status} /></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </Card>
+                </>
+              )}
             </div>
           )}
 
@@ -197,34 +273,40 @@ export default function AdminDashboard() {
             <div style={{ animation: "fade-in .3s ease" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
                 <StatsCard icon="👥" label="TOTAL CUSTOMERS" value={customers.length.toString()} />
-                <StatsCard icon="✅" label="ACTIVE THIS MONTH" value={customers.length.toString()} color={C.green} />
+                <StatsCard icon="✅" label="WITH BOOKINGS" value={customers.filter(c => bookings.some(b => b.customer_id === c.id)).length.toString()} color={C.green} />
                 <StatsCard icon="📋" label="TOTAL BOOKINGS" value={bookings.length.toString()} color={C.amber} />
               </div>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>All Customers</h3>
+                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>All Customers ({filteredCustomers.length})</h3>
                   <Btn variant="ghost" style={{ fontSize: 12 }}>Export CSV</Btn>
                 </div>
-                <table className="data-table">
-                  <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>City</th><th>Bookings</th><th>Joined</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {customers.map(c => (
-                      <tr key={c.id}>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{c.id}</span></td>
-                        <td><strong>{c.name}</strong></td>
-                        <td>{c.phone}</td>
-                        <td>{c.email}</td>
-                        <td>{c.city}</td>
-                        <td><span style={{ fontWeight: 700 }}>{c.bookings}</span></td>
-                        <td>{c.joined}</td>
-                        <td style={{ display: "flex", gap: 6 }}>
-                          <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }}>View</Btn>
-                          <Btn variant="danger" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => showToast("User suspended!")}>Suspend</Btn>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {loading ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>⏳ Loading...</div>
+                ) : filteredCustomers.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>No customers found</div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>City</th><th>Bookings</th><th>Joined</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {filteredCustomers.map(c => (
+                        <tr key={c.id}>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11, color: C.amber }}>{c.id.slice(0, 8)}...</span></td>
+                          <td><strong>{c.name || "—"}</strong></td>
+                          <td>{c.phone || "—"}</td>
+                          <td>{c.email || "—"}</td>
+                          <td>{c.city || "—"}</td>
+                          <td><span style={{ fontWeight: 700 }}>{bookings.filter(b => b.customer_id === c.id).length}</span></td>
+                          <td>{new Date(c.created_at).toLocaleDateString()}</td>
+                          <td style={{ display: "flex", gap: 6 }}>
+                            <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }}>View</Btn>
+                            <Btn variant="danger" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => suspendUser(c.id)}>Suspend</Btn>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -232,40 +314,39 @@ export default function AdminDashboard() {
           {/* MECHANICS */}
           {active === "mechanics" && (
             <div style={{ animation: "fade-in .3s ease" }}>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="🔧" label="TOTAL" value={mechanics.length.toString()} />
-                <StatsCard icon="✅" label="APPROVED" value={mechanics.filter(m => m.status === "approved").length.toString()} color={C.green} />
-                <StatsCard icon="⏳" label="PENDING" value={mechanics.filter(m => m.status === "pending").length.toString()} color={C.orange} />
-                <StatsCard icon="❌" label="REJECTED" value={mechanics.filter(m => m.status === "rejected").length.toString()} color={C.red} />
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
+                <StatsCard icon="🔧" label="TOTAL MECHANICS" value={mechanics.length.toString()} />
+                <StatsCard icon="✅" label="ACTIVE JOBS" value={activeBookings.length.toString()} color={C.green} />
+                <StatsCard icon="📋" label="COMPLETED JOBS" value={completedBookings.length.toString()} color={C.amber} />
               </div>
               <Card>
-                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>All Mechanics</h3>
-                <table className="data-table">
-                  <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>City</th><th>Skills</th><th>Experience</th><th>Rating</th><th>Jobs</th><th>Status</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {mechanics.map(m => (
-                      <tr key={m.id}>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{m.id}</span></td>
-                        <td><strong>{m.name}</strong></td>
-                        <td>{m.phone}</td>
-                        <td>{m.city}</td>
-                        <td><span style={{ fontSize: 12 }}>{m.skills.join(", ")}</span></td>
-                        <td>{m.experience} yrs</td>
-                        <td><strong style={{ color: C.amber }}>⭐ {m.rating}</strong></td>
-                        <td>{m.jobs}</td>
-                        <td><StatusBadge status={m.status} /></td>
-                        <td style={{ display: "flex", gap: 4 }}>
-                          {m.status === "pending" && <>
-                            <Btn variant="success" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => approveMechanic(m.id)}>✓ Approve</Btn>
-                            <Btn variant="danger" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => rejectMechanic(m.id)}>✗ Reject</Btn>
-                          </>}
-                          {m.status === "approved" && <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }}>View</Btn>}
-                          {m.status === "rejected" && <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => approveMechanic(m.id)}>Re-approve</Btn>}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>All Mechanics ({mechanics.length})</h3>
+                {loading ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>⏳ Loading...</div>
+                ) : mechanics.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>No mechanics registered yet</div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th><th>City</th><th>Jobs Done</th><th>Joined</th><th>Actions</th></tr></thead>
+                    <tbody>
+                      {mechanics.map(m => (
+                        <tr key={m.id}>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11, color: C.amber }}>{m.id.slice(0, 8)}...</span></td>
+                          <td><strong>{m.name || "—"}</strong></td>
+                          <td>{m.phone || "—"}</td>
+                          <td>{m.email || "—"}</td>
+                          <td>{m.city || "—"}</td>
+                          <td>{bookings.filter(b => b.mechanic_id === m.id && b.status === "completed").length}</td>
+                          <td>{new Date(m.created_at).toLocaleDateString()}</td>
+                          <td style={{ display: "flex", gap: 6 }}>
+                            <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }}>View</Btn>
+                            <Btn variant="danger" style={{ fontSize: 11, padding: "4px 8px" }} onClick={() => suspendUser(m.id)}>Suspend</Btn>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -274,37 +355,47 @@ export default function AdminDashboard() {
           {active === "bookings" && (
             <div style={{ animation: "fade-in .3s ease" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="📋" label="TOTAL BOOKINGS" value={bookings.length.toString()} />
-                <StatsCard icon="✅" label="COMPLETED" value={bookings.filter(b => b.status === "completed").length.toString()} color={C.green} />
-                <StatsCard icon="🔵" label="IN PROGRESS" value={bookings.filter(b => b.status === "in_progress").length.toString()} color={C.blue} />
-                <StatsCard icon="❌" label="CANCELLED" value="0" color={C.red} />
+                <StatsCard icon="📋" label="TOTAL" value={bookings.length.toString()} />
+                <StatsCard icon="⏳" label="PENDING" value={pendingBookings.length.toString()} color={C.orange} />
+                <StatsCard icon="🔵" label="ACTIVE" value={activeBookings.length.toString()} color={C.blue} />
+                <StatsCard icon="✅" label="COMPLETED" value={completedBookings.length.toString()} color={C.green} />
               </div>
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16 }}>
-                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>All Bookings</h3>
+                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary }}>All Bookings ({filteredBookings.length})</h3>
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Btn variant="ghost" style={{ fontSize: 12 }}>Filter</Btn>
                     <Btn variant="ghost" style={{ fontSize: 12 }}>Export</Btn>
                   </div>
                 </div>
-                <table className="data-table">
-                  <thead><tr><th>Booking ID</th><th>Issue</th><th>Customer</th><th>Mechanic</th><th>Location</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
-                  <tbody>
-                    {bookings.map(b => (
-                      <tr key={b.id}>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id}</span></td>
-                        <td>{b.issue}</td>
-                        <td>Customer</td>
-                        <td>{b.mechanic || "—"}</td>
-                        <td>{b.location}</td>
-                        <td>{b.date}</td>
-                        <td><strong>₹{b.amount || "—"}</strong></td>
-                        <td><StatusBadge status={b.status} /></td>
-                        <td><Btn variant="ghost" style={{ fontSize: 11, padding: "4px 8px" }}>Details</Btn></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {loading ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>⏳ Loading...</div>
+                ) : filteredBookings.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "32px 0", color: C.textMuted }}>No bookings found</div>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>Booking ID</th><th>Service</th><th>Customer ID</th><th>Location</th><th>Date</th><th>Amount</th><th>Status</th><th>Action</th></tr></thead>
+                    <tbody>
+                      {filteredBookings.map(b => (
+                        <tr key={b.id}>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                          <td>{b.service}</td>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11 }}>{b.customer_id?.slice(0, 8) || "—"}...</span></td>
+                          <td>{b.location_address || "—"}</td>
+                          <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                          <td><strong>₹{b.price || "—"}</strong></td>
+                          <td><StatusBadge status={b.status} /></td>
+                          <td style={{ display: "flex", gap: 4 }}>
+                            {b.status === "pending" && <Btn variant="success" style={{ fontSize: 11, padding: "4px 6px" }} onClick={() => updateBookingStatus(b.id, "accepted")}>Accept</Btn>}
+                            {b.status !== "completed" && b.status !== "cancelled" && (
+                              <Btn variant="danger" style={{ fontSize: 11, padding: "4px 6px" }} onClick={() => updateBookingStatus(b.id, "cancelled")}>Cancel</Btn>
+                            )}
+                            <Btn variant="ghost" style={{ fontSize: 11, padding: "4px 6px" }}>Details</Btn>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -313,32 +404,34 @@ export default function AdminDashboard() {
           {active === "revenue" && (
             <div style={{ animation: "fade-in .3s ease" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="💰" label="TOTAL REVENUE" value="₹9,50,000" delta="↑ 18% vs last month" color={C.amber} />
-                <StatsCard icon="📊" label="PLATFORM COMMISSION" value="₹76,000" delta="8% of total" color={C.green} />
-                <StatsCard icon="🔧" label="MECHANIC PAYOUTS" value="₹8,74,000" color={C.orange} />
-                <StatsCard icon="⏳" label="PENDING PAYOUTS" value="₹12,400" color={C.terra} />
+                <StatsCard icon="💰" label="TOTAL REVENUE" value={"₹" + totalRevenue.toLocaleString("en-IN")} color={C.amber} />
+                <StatsCard icon="📊" label="COMMISSION (8%)" value={"₹" + commission.toLocaleString("en-IN")} color={C.green} />
+                <StatsCard icon="🔧" label="MECHANIC PAYOUTS" value={"₹" + (totalRevenue - commission).toLocaleString("en-IN")} color={C.orange} />
+                <StatsCard icon="📋" label="PAID JOBS" value={completedBookings.length.toString()} color={C.terra} />
               </div>
-
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20 }}>
                 <Card>
-                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Monthly Revenue Breakdown</h3>
-                  <table className="data-table">
-                    <thead><tr><th>Month</th><th>Bookings</th><th>Total Revenue</th><th>Commission</th><th>Payouts</th><th>Growth</th></tr></thead>
-                    <tbody>
-                      {revenueData.map((r, i) => (
-                        <tr key={r.month}>
-                          <td><strong>{r.month} 2025</strong></td>
-                          <td>{Math.floor(r.amount / 500)}</td>
-                          <td><strong>₹{r.amount.toLocaleString("en-IN")}</strong></td>
-                          <td style={{ color: C.green }}>₹{Math.floor(r.amount * 0.08).toLocaleString("en-IN")}</td>
-                          <td>₹{Math.floor(r.amount * 0.92).toLocaleString("en-IN")}</td>
-                          <td style={{ color: i === 0 ? C.textMuted : C.green }}>{i === 0 ? "—" : `↑ ${Math.floor(Math.random() * 15 + 5)}%`}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Booking Revenue Breakdown</h3>
+                  {completedBookings.length === 0 ? (
+                    <p style={{ color: C.textMuted, textAlign: "center", padding: "24px 0" }}>No completed bookings yet</p>
+                  ) : (
+                    <table className="data-table">
+                      <thead><tr><th>Booking ID</th><th>Service</th><th>Date</th><th>Gross</th><th>Commission</th><th>Payout</th></tr></thead>
+                      <tbody>
+                        {completedBookings.map(b => (
+                          <tr key={b.id}>
+                            <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 11, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                            <td>{b.service}</td>
+                            <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                            <td><strong>₹{b.price || 0}</strong></td>
+                            <td style={{ color: C.green }}>₹{Math.floor((b.price || 0) * 0.08)}</td>
+                            <td>₹{Math.floor((b.price || 0) * 0.92)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </Card>
-
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <Card>
                     <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Commission Settings</h3>
@@ -357,10 +450,8 @@ export default function AdminDashboard() {
                   </Card>
                   <Card>
                     <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 600, color: C.textPrimary, marginBottom: 12 }}>Trigger Payouts</h3>
-                    <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>₹12,400 pending for 8 mechanics</p>
-                    <Btn variant="success" onClick={() => showToast("✅ Payouts initiated for all mechanics!")} style={{ width: "100%", justifyContent: "center" }}>
-                      💰 Send All Payouts
-                    </Btn>
+                    <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 16 }}>₹{(totalRevenue - commission).toLocaleString("en-IN")} pending for mechanics</p>
+                    <Btn variant="success" onClick={() => showToast("✅ Payouts initiated!")} style={{ width: "100%", justifyContent: "center" }}>💰 Send All Payouts</Btn>
                   </Card>
                 </div>
               </div>
@@ -370,43 +461,27 @@ export default function AdminDashboard() {
           {/* VERIFICATIONS */}
           {active === "verifications" && (
             <div style={{ animation: "fade-in .3s ease" }}>
-              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.textPrimary, marginBottom: 20 }}>Mechanic Verification Queue</h2>
-              {mechanics.filter(m => m.status === "pending").length === 0 ? (
+              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.textPrimary, marginBottom: 20 }}>Pending Bookings Queue</h2>
+              {pendingBookings.length === 0 ? (
                 <Card style={{ textAlign: "center", padding: 48 }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>✅</div>
                   <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 20, color: C.green }}>All caught up!</h3>
-                  <p style={{ color: C.textMuted }}>No pending verifications</p>
+                  <p style={{ color: C.textMuted }}>No pending bookings</p>
                 </Card>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                  {mechanics.filter(m => m.status === "pending").map(m => (
-                    <Card key={m.id}>
+                  {pendingBookings.map(b => (
+                    <Card key={b.id}>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 20, alignItems: "start" }}>
                         <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
-                            <div style={{ width: 52, height: 52, borderRadius: "50%", background: C.cream2, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Oswald',sans-serif", fontSize: 20, fontWeight: 700, color: C.amberDark }}>{m.name.charAt(0)}</div>
-                            <div>
-                              <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{m.name}</div>
-                              <div style={{ fontSize: 13, color: C.textMuted }}>{m.phone} · {m.city} · {m.experience} yrs exp</div>
-                            </div>
-                            <StatusBadge status={m.status} />
-                          </div>
-                          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-                            {m.skills.map(s => <span key={s} style={{ padding: "3px 10px", background: C.cream2, borderRadius: 20, fontSize: 12 }}>{s}</span>)}
-                          </div>
-                          <div style={{ display: "flex", gap: 12 }}>
-                            {["🪪 Aadhaar", "📋 License", "🏅 Certification"].map(doc => (
-                              <span key={doc} style={{ padding: "4px 12px", background: "rgba(45,122,58,.1)", border: "1px solid rgba(45,122,58,.2)", borderRadius: 8, fontSize: 12, color: C.green, cursor: "pointer" }}
-                                onClick={() => showToast(`Viewing ${doc}...`)}>
-                                {doc} ✓
-                              </span>
-                            ))}
-                          </div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>{b.service}</div>
+                          <div style={{ fontSize: 13, color: C.textSecondary, marginBottom: 4 }}>📍 {b.location_address || "Location not set"}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted }}>Customer: {b.customer_id?.slice(0, 8)}... · {new Date(b.created_at).toLocaleString()}</div>
+                          <div style={{ marginTop: 8 }}><StatusBadge status={b.status} /></div>
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                          <Btn variant="success" onClick={() => approveMechanic(m.id)} style={{ justifyContent: "center" }}>✅ Approve</Btn>
-                          <Btn variant="danger" onClick={() => rejectMechanic(m.id)} style={{ justifyContent: "center" }}>❌ Reject</Btn>
-                          <Btn variant="ghost" onClick={() => showToast("Message sent to mechanic")} style={{ justifyContent: "center", fontSize: 12 }}>📞 Contact</Btn>
+                          <Btn variant="success" onClick={() => updateBookingStatus(b.id, "accepted")} style={{ justifyContent: "center" }}>✅ Assign</Btn>
+                          <Btn variant="danger" onClick={() => updateBookingStatus(b.id, "cancelled")} style={{ justifyContent: "center" }}>❌ Cancel</Btn>
                         </div>
                       </div>
                     </Card>
@@ -441,9 +516,7 @@ export default function AdminDashboard() {
                         <td>{t.sub}</td>
                         <td>{t.date}</td>
                         <td><StatusBadge status={t.status} /></td>
-                        <td>
-                          <Btn variant="primary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => showToast("Opening ticket " + t.id)}>Resolve</Btn>
-                        </td>
+                        <td><Btn variant="primary" style={{ fontSize: 11, padding: "4px 10px" }} onClick={() => showToast("Opening ticket " + t.id)}>Resolve</Btn></td>
                       </tr>
                     ))}
                   </tbody>
@@ -467,12 +540,7 @@ export default function AdminDashboard() {
                       <StatusBadge status={d.status} />
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 16 }}>
-                      {[
-                        { label: "Booking", val: d.booking },
-                        { label: "Customer", val: d.customer },
-                        { label: "Mechanic", val: d.mechanic },
-                        { label: "Amount", val: d.amount },
-                      ].map(f => (
+                      {[{ label: "Booking", val: d.booking }, { label: "Customer", val: d.customer }, { label: "Mechanic", val: d.mechanic }, { label: "Amount", val: d.amount }].map(f => (
                         <div key={f.label}>
                           <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Oswald',sans-serif" }}>{f.label}</div>
                           <div style={{ fontSize: 14, fontWeight: 600, color: C.textPrimary }}>{f.val}</div>
@@ -494,7 +562,7 @@ export default function AdminDashboard() {
           {/* NOTIFICATIONS */}
           {active === "notifications" && (
             <div style={{ animation: "fade-in .3s ease", maxWidth: 700 }}>
-              <Card style={{ marginBottom: 20 }}>
+              <Card>
                 <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Send Broadcast Notification</h3>
                 <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                   <div>
@@ -506,7 +574,7 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                   <div>
-                    <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 8 }}>NOTIFICATION TITLE</label>
+                    <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 8 }}>TITLE</label>
                     <input placeholder="e.g. Special Offer This Weekend!" style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, background: C.cream }} />
                   </div>
                   <div>
@@ -536,7 +604,7 @@ export default function AdminDashboard() {
                     <input type={s.type} defaultValue={s.val} style={{ width: "100%", padding: "10px 14px", border: `1.5px solid ${C.border}`, borderRadius: 8, fontSize: 14, background: C.cream }} />
                   </div>
                 ))}
-                <Btn onClick={() => showToast("✅ Settings saved!")} style={{ marginTop: 8 }}>Save Settings</Btn>
+                <Btn onClick={() => showToast("✅ Settings saved!")}>Save Settings</Btn>
               </Card>
             </div>
           )}
@@ -544,7 +612,7 @@ export default function AdminDashboard() {
       </div>
 
       {toast.msg && (
-        <div className={`toast ${toast.type}`} style={{ background: toast.type === "error" ? C.red : C.green }}>
+        <div className={`toast ${toast.type === "error" ? "error" : "success"}`}>
           {toast.msg}
         </div>
       )}
