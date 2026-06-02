@@ -3,6 +3,8 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { C, Input, Btn, Card } from "@/components/ui";
+import { store } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const SKILLS = ["Engine Repair", "Puncture", "Battery", "EV Specialist", "AC Repair", "Towing", "Electrical", "Body Work", "Brake Service", "Wheel Alignment", "Fuel System", "General Repair"];
 const VEHICLE_TYPES = ["Bike / Scooter", "Car", "Auto Rickshaw", "Electric Vehicle", "Truck / Commercial"];
@@ -15,8 +17,9 @@ export default function BecomeMechanicPage() {
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [serverError, setServerError] = useState("");
 
-  const [personal, setPersonal] = useState({ name: "", phone: "", email: "", dob: "", photo: "" });
+  const [personal, setPersonal] = useState({ name: "", phone: "", email: "", password: "", confirm: "", dob: "", photo: "" });
   const [professional, setProfessional] = useState({ workshopName: "", experience: "", workshopType: "mobile", serviceRadius: "10", languages: [] as string[], skills: [] as string[], vehicleTypes: [] as string[] });
   const [docs, setDocs] = useState({ aadhaar: "", license: "", certification: "", selfie: "" });
   const [bank, setBank] = useState({ accountName: "", accountNumber: "", ifsc: "", upi: "" });
@@ -24,13 +27,14 @@ export default function BecomeMechanicPage() {
   const [availability, setAvailability] = useState({ mon: true, tue: true, wed: true, thu: true, fri: true, sat: true, sun: false, startTime: "08:00", endTime: "20:00" });
 
   const setP = (k: string, v: string) => setPersonal(f => ({ ...f, [k]: v }));
-  const setPro = (k: string, v: any) => setProfessional(f => ({ ...f, [k]: v }));
+  const setPro = (k: string, v: string | string[]) => setProfessional(f => ({ ...f, [k]: v }));
   const setD = (k: string, v: string) => setDocs(f => ({ ...f, [k]: v }));
   const setB = (k: string, v: string) => setBank(f => ({ ...f, [k]: v }));
   const setL = (k: string, v: string) => setLocation(f => ({ ...f, [k]: v }));
-  const setAv = (k: string, v: any) => setAvailability(f => ({ ...f, [k]: v }));
+  const setAv = (k: string, v: boolean | string) => setAvailability(f => ({ ...f, [k]: v }));
 
-  const toggleArray = (arr: string[], val: string) => arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
+  const toggleArray = (arr: string[], val: string) =>
+    arr.includes(val) ? arr.filter(x => x !== val) : [...arr, val];
 
   const validate = () => {
     const e: Record<string, string> = {};
@@ -38,6 +42,8 @@ export default function BecomeMechanicPage() {
       if (!personal.name) e.name = "Required";
       if (!personal.phone || personal.phone.length < 10) e.phone = "Valid phone required";
       if (!personal.email || !personal.email.includes("@")) e.email = "Valid email required";
+      if (!personal.password || personal.password.length < 6) e.password = "Min 6 characters";
+      if (personal.password !== personal.confirm) e.confirm = "Passwords don't match";
     }
     if (step === 2) {
       if (professional.skills.length === 0) e.skills = "Select at least one skill";
@@ -63,9 +69,91 @@ export default function BecomeMechanicPage() {
 
   const handleSubmit = async () => {
     setLoading(true);
-    await new Promise(r => setTimeout(r, 2000));
-    setLoading(false);
-    setSubmitted(true);
+    setServerError("");
+
+    try {
+      // 1. Create auth user with email + password
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: personal.email,
+        password: personal.password,
+      });
+
+      if (authError) {
+        if (
+          authError.message.toLowerCase().includes("already registered") ||
+          authError.message.toLowerCase().includes("already been registered") ||
+          authError.message.toLowerCase().includes("user already exists") ||
+          authError.message.toLowerCase().includes("duplicate")
+        ) {
+          setServerError("This email is already registered. Please login instead.");
+          setStep(1);
+          setLoading(false);
+          return;
+        }
+        throw new Error(authError.message);
+      }
+
+      const userId = authData.user?.id;
+      if (!userId) throw new Error("Failed to create account. Please try again.");
+
+      // 2. Save to profiles table as mechanic
+      const { error: profileError } = await supabase.from("profiles").upsert({
+        id: userId,
+        name: personal.name,
+        phone: personal.phone,
+        email: personal.email,
+        role: "mechanic",
+        city: location.city,
+        state: location.state,
+      }, { onConflict: "id" });
+
+      if (profileError && !profileError.message.toLowerCase().includes("duplicate")) {
+        throw new Error(profileError.message);
+      }
+
+      // 3. Save mechanic profile details
+      const { error: mechError } = await supabase.from("mechanic_profiles").upsert({
+        id: userId,
+        experience: professional.experience,
+        workshop_name: professional.workshopName,
+        workshop_type: professional.workshopType,
+        skills: professional.skills,
+        vehicle_types: professional.vehicleTypes,
+        languages: professional.languages,
+        service_radius: professional.serviceRadius,
+        bank_account_name: bank.accountName,
+        bank_account_number: bank.accountNumber,
+        ifsc: bank.ifsc,
+        upi: bank.upi,
+        address: location.address,
+        pin: location.pin,
+        status: "pending",
+      }, { onConflict: "id" });
+
+      if (mechError && !mechError.message.toLowerCase().includes("duplicate")) {
+        // Non-fatal — profile was created, mechanic details failed
+        console.error("Mechanic profile error:", mechError.message);
+      }
+
+      // 4. Update local store
+      store.setUser({
+        id: userId,
+        name: personal.name,
+        email: personal.email,
+        phone: personal.phone,
+        role: "mechanic",
+        city: location.city,
+        state: location.state,
+      });
+
+      setSubmitted(true);
+
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Submission failed. Please try again.";
+      setServerError(message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const steps = [
@@ -82,10 +170,13 @@ export default function BecomeMechanicPage() {
       <div style={{ background: C.cream, minHeight: "100vh" }}>
         <Navbar />
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "80vh", padding: "80px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 72, marginBottom: 24, animation: "float 3s ease-in-out infinite" }}>🎉</div>
+          <div style={{ fontSize: 72, marginBottom: 24 }}>🎉</div>
           <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 40, fontWeight: 700, color: C.textPrimary, marginBottom: 16 }}>Application Submitted!</h1>
-          <p style={{ fontSize: 16, color: C.textSecondary, maxWidth: 500, lineHeight: 1.7, marginBottom: 32 }}>
+          <p style={{ fontSize: 16, color: C.textSecondary, maxWidth: 500, lineHeight: 1.7, marginBottom: 12 }}>
             Thank you, <strong>{personal.name}</strong>! Your mechanic application is under review. Our team will verify your documents and call you within <strong>24 hours</strong>.
+          </p>
+          <p style={{ fontSize: 14, color: C.textSecondary, marginBottom: 32 }}>
+            You can now <strong>login</strong> using your email <strong>{personal.email}</strong> and the password you set.
           </p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, maxWidth: 600, marginBottom: 40 }}>
             {[
@@ -100,9 +191,15 @@ export default function BecomeMechanicPage() {
               </Card>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 12 }}>
-            <button onClick={() => router.push("/")} style={{ padding: "12px 28px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Back to Home</button>
-            <button onClick={() => router.push("/login")} style={{ padding: "12px 28px", background: "transparent", border: `1.5px solid ${C.amber}`, color: C.amberDark, borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>Login as Mechanic</button>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", justifyContent: "center" }}>
+            <button onClick={() => router.push("/")}
+              style={{ padding: "12px 28px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              Back to Home
+            </button>
+            <button onClick={() => router.push("/login")}
+              style={{ padding: "12px 28px", background: "transparent", border: `1.5px solid ${C.amber}`, color: C.amberDark, borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 600, cursor: "pointer" }}>
+              Login as Mechanic →
+            </button>
           </div>
         </div>
       </div>
@@ -111,9 +208,22 @@ export default function BecomeMechanicPage() {
 
   return (
     <div style={{ background: C.cream, minHeight: "100vh" }}>
+      <style>{`
+        .step-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-family: 'Oswald', sans-serif; font-size: 13px; font-weight: 700; }
+        .step-dot.done { background: ${C.amber}; color: white; }
+        .step-dot.active { background: ${C.amber}; color: white; box-shadow: 0 0 0 4px rgba(224,123,26,.2); }
+        .step-dot.pending { background: ${C.cream2}; color: ${C.textMuted}; border: 2px solid ${C.border}; }
+        .upload-zone { border: 2px dashed ${C.border}; border-radius: 12px; padding: 24px; text-align: center; cursor: pointer; transition: all .2s; }
+        .upload-zone:hover { border-color: ${C.amber}; background: rgba(224,123,26,.04); }
+        @media (max-width: 600px) {
+          .mechanic-card { padding: 24px 16px !important; }
+          .mechanic-grid { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+
       <Navbar />
 
-      {/* Hero banner */}
+      {/* Hero */}
       <div style={{ background: `linear-gradient(135deg, ${C.brown}, ${C.terra})`, padding: "80px 60px 40px", textAlign: "center" }}>
         <h1 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 44, fontWeight: 700, color: "white", marginBottom: 12 }}>
           🔧 Become a Mechanic Partner
@@ -121,7 +231,7 @@ export default function BecomeMechanicPage() {
         <p style={{ fontSize: 16, color: "rgba(255,255,255,.8)", maxWidth: 560, margin: "0 auto" }}>
           Earn ₹40,000+/month. Work your own hours. Join 2,800+ verified mechanics across India.
         </p>
-        <div style={{ display: "flex", justifyContent: "center", gap: 32, marginTop: 28 }}>
+        <div style={{ display: "flex", justifyContent: "center", gap: 32, marginTop: 28, flexWrap: "wrap" }}>
           {["💰 Earn ₹40K+/month", "⏰ Flexible hours", "📱 Easy app", "🔒 Safe & verified"].map(f => (
             <span key={f} style={{ fontSize: 13, color: "rgba(255,255,255,.75)", fontWeight: 500 }}>{f}</span>
           ))}
@@ -129,6 +239,7 @@ export default function BecomeMechanicPage() {
       </div>
 
       <div style={{ maxWidth: 780, margin: "0 auto", padding: "40px 24px 60px" }}>
+
         {/* Step indicator */}
         <div style={{ display: "flex", alignItems: "center", marginBottom: 40, overflowX: "auto" }}>
           {steps.map((s, i) => (
@@ -144,17 +255,20 @@ export default function BecomeMechanicPage() {
           ))}
         </div>
 
-        <div style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "36px 40px" }}>
+        <div className="mechanic-card" style={{ background: C.white, border: `1px solid ${C.border}`, borderRadius: 20, padding: "36px 40px" }}>
 
-          {/* STEP 1: Personal */}
+          {/* STEP 1: Personal + Password */}
           {step === 1 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
-              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Personal Information</h2>
+            <div>
+              <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Personal Information</h2>
+              <p style={{ fontSize: 13, color: C.textSecondary, marginBottom: 24 }}>Set up your login credentials along with your personal details.</p>
+
               <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
                 <div style={{ width: 88, height: 88, borderRadius: "50%", background: C.cream2, border: `2px dashed ${C.amber}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 32 }}>👤</div>
               </div>
               <p style={{ textAlign: "center", fontSize: 12, color: C.textMuted, marginTop: -12, marginBottom: 20 }}>Click to upload profile photo</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+              <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div style={{ gridColumn: "1/-1" }}>
                   <Input label="Full Name" value={personal.name} onChange={v => setP("name", v)} placeholder="Your full name" required />
                   {errors.name && <span style={{ fontSize: 12, color: C.red }}>{errors.name}</span>}
@@ -170,13 +284,29 @@ export default function BecomeMechanicPage() {
                 <div>
                   <Input label="Date of Birth" type="date" value={personal.dob} onChange={v => setP("dob", v)} />
                 </div>
+                <div style={{ gridColumn: "1/-1" }}>
+                  <div style={{ height: 1, background: C.border, margin: "8px 0 16px" }} />
+                  <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: C.textSecondary, letterSpacing: 1, marginBottom: 14 }}>LOGIN CREDENTIALS</div>
+                </div>
+                <div>
+                  <Input label="Password" type="password" value={personal.password} onChange={v => setP("password", v)} placeholder="Min 6 characters" required />
+                  {errors.password && <span style={{ fontSize: 12, color: C.red }}>{errors.password}</span>}
+                </div>
+                <div>
+                  <Input label="Confirm Password" type="password" value={personal.confirm} onChange={v => setP("confirm", v)} placeholder="Repeat password" required />
+                  {errors.confirm && <span style={{ fontSize: 12, color: C.red }}>{errors.confirm}</span>}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16, padding: "10px 14px", background: "rgba(224,123,26,.06)", border: `1px solid rgba(224,123,26,.2)`, borderRadius: 8, fontSize: 12, color: C.amberDark }}>
+                💡 You will use this email and password to login as a mechanic after your application is approved.
               </div>
             </div>
           )}
 
           {/* STEP 2: Skills */}
           {step === 2 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
+            <div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Skills & Services</h2>
               <div style={{ marginBottom: 20 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 10 }}>SPECIALIZATIONS <span style={{ color: C.terra }}>*</span></label>
@@ -188,7 +318,7 @@ export default function BecomeMechanicPage() {
                     </div>
                   ))}
                 </div>
-                {errors.skills && <span style={{ fontSize: 12, color: C.red }}>{errors.skills}</span>}
+                {errors.skills && <span style={{ fontSize: 12, color: C.red, display: "block", marginTop: 6 }}>{errors.skills}</span>}
               </div>
 
               <div style={{ marginBottom: 20 }}>
@@ -203,7 +333,7 @@ export default function BecomeMechanicPage() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+              <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
                 <Input label="Years of Experience" type="select" value={professional.experience} onChange={v => setPro("experience", v)} options={["Less than 1 year", "1–2 years", "3–5 years", "5–10 years", "10+ years"]} required />
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 8 }}>WORKSHOP TYPE</label>
@@ -218,7 +348,7 @@ export default function BecomeMechanicPage() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: 8 }}>
+              <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 10 }}>LANGUAGES SPOKEN</label>
                 <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                   {LANGUAGES.map(l => (
@@ -234,17 +364,17 @@ export default function BecomeMechanicPage() {
 
           {/* STEP 3: Documents */}
           {step === 3 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
+            <div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Document Upload</h2>
               <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 24 }}>All documents are encrypted and stored securely. Used only for verification.</p>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 {[
                   { key: "aadhaar", label: "Aadhaar Card", icon: "🪪", required: true },
                   { key: "license", label: "Driving License", icon: "📋", required: true },
                   { key: "certification", label: "Mechanic Certification", icon: "🏅", required: false },
                   { key: "selfie", label: "Profile Selfie", icon: "🤳", required: true },
                 ].map(doc => (
-                  <div key={doc.key} onClick={() => setD(doc.key as any, "uploaded")}
+                  <div key={doc.key} onClick={() => setD(doc.key as keyof typeof docs, "uploaded")}
                     className="upload-zone" style={{ background: docs[doc.key as keyof typeof docs] ? "rgba(45,122,58,.05)" : "transparent", borderColor: docs[doc.key as keyof typeof docs] ? C.green : undefined }}>
                     <div style={{ fontSize: 32, marginBottom: 8 }}>{docs[doc.key as keyof typeof docs] ? "✅" : doc.icon}</div>
                     <div style={{ fontSize: 14, fontWeight: 600, color: docs[doc.key as keyof typeof docs] ? C.green : C.textSecondary }}>
@@ -264,15 +394,19 @@ export default function BecomeMechanicPage() {
 
           {/* STEP 4: Bank */}
           {step === 4 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
+            <div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 8 }}>Bank Details</h2>
               <p style={{ fontSize: 13, color: C.textMuted, marginBottom: 24 }}>Your earnings will be transferred to this account daily.</p>
               <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <Input label="Account Holder Name" value={bank.accountName} onChange={v => setB("accountName", v)} placeholder="Name as per bank records" required />
-                {errors.accountName && <span style={{ fontSize: 12, color: C.red }}>{errors.accountName}</span>}
-                <Input label="Account Number" value={bank.accountNumber} onChange={v => setB("accountNumber", v)} placeholder="Enter account number" required />
-                {errors.accountNumber && <span style={{ fontSize: 12, color: C.red }}>{errors.accountNumber}</span>}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <div>
+                  <Input label="Account Holder Name" value={bank.accountName} onChange={v => setB("accountName", v)} placeholder="Name as per bank records" required />
+                  {errors.accountName && <span style={{ fontSize: 12, color: C.red }}>{errors.accountName}</span>}
+                </div>
+                <div>
+                  <Input label="Account Number" value={bank.accountNumber} onChange={v => setB("accountNumber", v)} placeholder="Enter account number" required />
+                  {errors.accountNumber && <span style={{ fontSize: 12, color: C.red }}>{errors.accountNumber}</span>}
+                </div>
+                <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                   <div>
                     <Input label="IFSC Code" value={bank.ifsc} onChange={v => setB("ifsc", v.toUpperCase())} placeholder="e.g. SBIN0001234" required />
                     {errors.ifsc && <span style={{ fontSize: 12, color: C.red }}>{errors.ifsc}</span>}
@@ -280,17 +414,17 @@ export default function BecomeMechanicPage() {
                   <Input label="UPI ID (Optional)" value={bank.upi} onChange={v => setB("upi", v)} placeholder="yourname@upi" />
                 </div>
                 <div style={{ padding: 14, background: "rgba(45,122,58,.08)", border: `1px solid ${C.green}`, borderRadius: 10, fontSize: 13, color: C.green }}>
-                  🔒 Your bank details are encrypted with 256-bit SSL. We never share your financial information.
+                  🔒 Your bank details are encrypted with 256-bit SSL.
                 </div>
               </div>
             </div>
           )}
 
-          {/* STEP 5: Location & Availability */}
+          {/* STEP 5: Location */}
           {step === 5 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
+            <div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Location & Availability</h2>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+              <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
                 <div style={{ gridColumn: "1/-1" }}>
                   <Input label="Workshop / Home Address" value={location.address} onChange={v => setL("address", v)} placeholder="Full address" />
                 </div>
@@ -307,17 +441,17 @@ export default function BecomeMechanicPage() {
 
               <div style={{ marginBottom: 20 }}>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.textSecondary, fontFamily: "'Oswald',sans-serif", display: "block", marginBottom: 12 }}>WORKING DAYS</label>
-                <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                   {(["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const).map(day => (
                     <div key={day} onClick={() => setAv(day, !availability[day])}
-                      style={{ flex: 1, padding: "10px 4px", textAlign: "center", border: `2px solid ${availability[day] ? C.amber : C.border}`, borderRadius: 8, cursor: "pointer", background: availability[day] ? "rgba(224,123,26,.1)" : C.cream, fontSize: 12, fontWeight: 600, color: availability[day] ? C.amberDark : C.textMuted, transition: "all .2s", textTransform: "capitalize" }}>
+                      style={{ flex: 1, minWidth: 40, padding: "10px 4px", textAlign: "center", border: `2px solid ${availability[day] ? C.amber : C.border}`, borderRadius: 8, cursor: "pointer", background: availability[day] ? "rgba(224,123,26,.1)" : C.cream, fontSize: 12, fontWeight: 600, color: availability[day] ? C.amberDark : C.textMuted, transition: "all .2s" }}>
                       {day.charAt(0).toUpperCase() + day.slice(1)}
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="mechanic-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <Input label="Start Time" type="time" value={availability.startTime} onChange={v => setAv("startTime", v)} />
                 <Input label="End Time" type="time" value={availability.endTime} onChange={v => setAv("endTime", v)} />
               </div>
@@ -326,13 +460,14 @@ export default function BecomeMechanicPage() {
 
           {/* STEP 6: Review */}
           {step === 6 && (
-            <div style={{ animation: "slide-up .3s ease" }}>
+            <div>
               <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 26, fontWeight: 700, color: C.textPrimary, marginBottom: 24 }}>Review & Submit</h2>
-              <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 24 }}>
                 {[
                   { label: "Name", val: personal.name || "—" },
                   { label: "Phone", val: personal.phone || "—" },
                   { label: "Email", val: personal.email || "—" },
+                  { label: "Login Password", val: personal.password ? "••••••••" : "—" },
                   { label: "Experience", val: professional.experience || "—" },
                   { label: "Skills", val: professional.skills.join(", ") || "—" },
                   { label: "City", val: location.city || "—" },
@@ -346,8 +481,20 @@ export default function BecomeMechanicPage() {
               </div>
 
               <div style={{ background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 20, fontSize: 13, color: C.textSecondary, lineHeight: 1.7 }}>
-                ✅ By submitting, you agree to our <a href="#" style={{ color: C.amber }}>Terms of Service</a> and <a href="#" style={{ color: C.amber }}>Mechanic Agreement</a>. Platform commission is <strong>8%</strong> per completed job.
+                ✅ By submitting, you agree to our <a href="/terms" style={{ color: C.amber }}>Terms of Service</a> and <a href="/terms" style={{ color: C.amber }}>Mechanic Agreement</a>. Platform commission is <strong>8%</strong> per completed job.
               </div>
+            </div>
+          )}
+
+          {/* Server error */}
+          {serverError && (
+            <div style={{ marginTop: 16, background: "#fdecea", border: "1px solid #c0392b", borderRadius: 8, padding: 14, fontSize: 13, color: "#c0392b", display: "flex", flexDirection: "column", gap: 8 }}>
+              <div>⚠️ {serverError}</div>
+              {serverError.includes("already registered") && (
+                <a href="/login" style={{ color: "#c0392b", fontWeight: 700, textDecoration: "underline", fontSize: 13 }}>
+                  → Click here to login instead
+                </a>
+              )}
             </div>
           )}
 
@@ -361,6 +508,7 @@ export default function BecomeMechanicPage() {
                 </Btn>
             }
           </div>
+
           <p style={{ textAlign: "center", fontSize: 13, color: C.textMuted, marginTop: 16 }}>
             Already registered? <a href="/login" style={{ color: C.amber, fontWeight: 600 }}>Login here</a>
           </p>
