@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { C, StatusBadge, StatsCard, Card, Btn } from "@/components/ui";
 import { store, sampleBookings } from "@/store";
+import { supabase } from "@/lib/supabase";
 
 const NAV = [
   { icon: "📊", label: "Dashboard", id: "dashboard" },
@@ -16,10 +17,22 @@ const NAV = [
   { icon: "⚙️", label: "Settings", id: "settings" },
 ];
 
-const INCOMING = [
-  { id: "REQ001", customer: "Amit S.", vehicle: "Maruti Swift", issue: "Engine Problem", distance: "1.8 km", fare: "₹450–₹600", time: 15 },
-  { id: "REQ002", customer: "Priya R.", vehicle: "Honda Activa", issue: "Puncture", distance: "0.9 km", fare: "₹150–₹200", time: 12 },
-];
+const JOB_STEPS = ["Reached Customer", "Diagnosis Started", "Repair Started", "Repair Completed"];
+
+type Booking = {
+  id: string;
+  customer_id: string | null;
+  service: string;
+  status: string;
+  location_address: string | null;
+  price: number | null;
+  created_at: string;
+  customer?: string;
+  vehicle?: string;
+  distance?: string;
+  fare?: string;
+  time?: number;
+};
 
 export default function MechanicDashboard() {
   const router = useRouter();
@@ -28,25 +41,90 @@ export default function MechanicDashboard() {
   const [collapsed, setCollapsed] = useState(false);
   const [isOnline, setIsOnline] = useState(true);
   const [toast, setToast] = useState({ msg: "", type: "" });
-  const [requests, setRequests] = useState(INCOMING);
-  const [timers, setTimers] = useState<Record<string, number>>({ REQ001: 15, REQ002: 12 });
-  const [acceptedJobs, setAcceptedJobs] = useState<typeof INCOMING>([]);
+
+  // Real data from Supabase
+  const [requests, setRequests] = useState<Booking[]>([]);
+  const [acceptedJobs, setAcceptedJobs] = useState<Booking[]>([]);
+  const [completedJobs, setCompletedJobs] = useState<Booking[]>([]);
+  const [loadingRequests, setLoadingRequests] = useState(true);
+
+  const [timers, setTimers] = useState<Record<string, number>>({});
   const [jobStep, setJobStep] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const u = store.getUser();
     if (!u || u.role !== "mechanic") { router.push("/login"); return; }
     setUser(u);
+    fetchBookings();
+
+    // Real-time subscription for new bookings
+    const channel = supabase
+      .channel("bookings-mechanic")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "bookings" }, (payload) => {
+        const newBooking = payload.new as Booking;
+        if (newBooking.status === "pending") {
+          setRequests(prev => [newBooking, ...prev]);
+          setTimers(prev => ({ ...prev, [newBooking.id]: 30 }));
+          showToast("🚨 New booking request!");
+        }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Countdown timers for incoming requests
+  const fetchBookings = async () => {
+    setLoadingRequests(true);
+    try {
+      // Fetch pending bookings (new requests)
+      const { data: pending } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("status", "pending")
+        .order("created_at", { ascending: false });
+
+      // Fetch accepted bookings
+      const { data: accepted } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("status", "accepted")
+        .order("created_at", { ascending: false });
+
+      // Fetch completed bookings
+      const { data: completed } = await supabase
+        .from("bookings")
+        .select("*")
+        .eq("status", "completed")
+        .order("created_at", { ascending: false });
+
+      const enrichBooking = (b: Booking) => ({
+        ...b,
+        customer: "Customer",
+        vehicle: "Vehicle",
+        distance: "1.5 km",
+        fare: b.price ? `₹${b.price}` : "₹200–₹600",
+        time: 30,
+      });
+
+      const pendingList = (pending || []).map(enrichBooking);
+      setRequests(pendingList);
+      setTimers(Object.fromEntries(pendingList.map(b => [b.id, 30])));
+      setAcceptedJobs((accepted || []).map(enrichBooking));
+      setCompletedJobs((completed || []).map(enrichBooking));
+
+    } catch (err) {
+      console.error("Failed to fetch bookings", err);
+    } finally {
+      setLoadingRequests(false);
+    }
+  };
+
+  // Countdown timers
   useEffect(() => {
     const interval = setInterval(() => {
       setTimers(prev => {
         const updated = { ...prev };
-        Object.keys(updated).forEach(k => {
-          if (updated[k] > 0) updated[k] -= 1;
-        });
+        Object.keys(updated).forEach(k => { if (updated[k] > 0) updated[k] -= 1; });
         return updated;
       });
     }, 1000);
@@ -58,31 +136,52 @@ export default function MechanicDashboard() {
     setTimeout(() => setToast({ msg: "", type: "" }), 3000);
   };
 
-  const acceptRequest = (req: typeof INCOMING[0]) => {
-    setRequests(prev => prev.filter(r => r.id !== req.id));
-    setAcceptedJobs(prev => [...prev, req]);
-    setJobStep(prev => ({ ...prev, [req.id]: 0 }));
-    showToast("✅ Job accepted! Navigate to customer.");
-    setActive("accepted");
+  const acceptRequest = async (req: Booking) => {
+    try {
+      const { error } = await supabase
+        .from("bookings")
+        .update({ status: "accepted" })
+        .eq("id", req.id);
+
+      if (error) throw error;
+
+      setRequests(prev => prev.filter(r => r.id !== req.id));
+      setAcceptedJobs(prev => [{ ...req, status: "accepted" }, ...prev]);
+      setJobStep(prev => ({ ...prev, [req.id]: 0 }));
+      showToast("✅ Job accepted! Navigate to customer.");
+      setActive("accepted");
+    } catch (err: any) {
+      showToast("Failed to accept: " + err.message, "error");
+    }
   };
 
-  const declineRequest = (id: string) => {
-    setRequests(prev => prev.filter(r => r.id !== id));
-    showToast("Job declined.", "error");
+  const declineRequest = async (id: string) => {
+    try {
+      await supabase.from("bookings").update({ status: "cancelled" }).eq("id", id);
+      setRequests(prev => prev.filter(r => r.id !== id));
+      showToast("Job declined.", "error");
+    } catch {
+      setRequests(prev => prev.filter(r => r.id !== id));
+      showToast("Job declined.", "error");
+    }
   };
 
-  const JOB_STEPS = ["Reached Customer", "Diagnosis Started", "Repair Started", "Repair Completed"];
-
-  const advanceStep = (jobId: string) => {
-    setJobStep(prev => {
-      const current = prev[jobId] ?? 0;
-      if (current < JOB_STEPS.length - 1) return { ...prev, [jobId]: current + 1 };
-      // Complete
-      setAcceptedJobs(p => p.filter(j => j.id !== jobId));
-      showToast("🎉 Job completed! ₹499 credited to wallet.");
-      setActive("completed");
-      return prev;
-    });
+  const advanceStep = async (job: Booking) => {
+    const current = jobStep[job.id] ?? 0;
+    if (current < JOB_STEPS.length - 1) {
+      setJobStep(prev => ({ ...prev, [job.id]: current + 1 }));
+    } else {
+      // Complete the job
+      try {
+        await supabase.from("bookings").update({ status: "completed" }).eq("id", job.id);
+        setAcceptedJobs(prev => prev.filter(j => j.id !== job.id));
+        setCompletedJobs(prev => [{ ...job, status: "completed" }, ...prev]);
+        showToast("🎉 Job completed! ₹499 credited to wallet.");
+        setActive("completed");
+      } catch (err: any) {
+        showToast("Error completing job: " + err.message, "error");
+      }
+    }
   };
 
   const revenueData = [1200, 1800, 1400, 2200, 1600, 2400, 1950];
@@ -113,7 +212,6 @@ export default function MechanicDashboard() {
                 <div style={{ fontSize: 11, color: C.amber }}>⭐ 4.9 · Mechanic</div>
               </div>
             </div>
-            {/* Online toggle */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", background: isOnline ? "rgba(45,122,58,.1)" : C.cream2, borderRadius: 10, padding: "10px 14px", border: `1px solid ${isOnline ? C.green : C.border}` }}>
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: isOnline ? C.green : C.textMuted, fontFamily: "'Oswald',sans-serif" }}>{isOnline ? "🟢 ONLINE" : "⚫ OFFLINE"}</div>
@@ -151,7 +249,6 @@ export default function MechanicDashboard() {
 
       {/* Main */}
       <div style={{ marginLeft: collapsed ? 64 : 248, flex: 1, transition: "margin .3s" }}>
-        {/* Top bar */}
         <div style={{ background: C.white, borderBottom: `1px solid ${C.border}`, padding: "0 28px", height: 60, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 50 }}>
           <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 20, fontWeight: 700, color: C.textPrimary }}>
             {NAV.find(n => n.id === active)?.icon} {NAV.find(n => n.id === active)?.label}
@@ -160,7 +257,7 @@ export default function MechanicDashboard() {
             <div style={{ fontFamily: "'Space Mono',monospace", fontSize: 14, fontWeight: 700, color: C.amberDark, background: C.cream2, padding: "6px 14px", borderRadius: 8 }}>
               💰 Today: ₹1,240
             </div>
-            <button onClick={() => setActive("requests")} style={{ position: "relative", width: 38, height: 38, borderRadius: 8, background: C.cream2, border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 18 }}>
+            <button onClick={() => { setActive("requests"); fetchBookings(); }} style={{ position: "relative", width: 38, height: 38, borderRadius: 8, background: C.cream2, border: `1px solid ${C.border}`, cursor: "pointer", fontSize: 18 }}>
               🔔
               {requests.length > 0 && <span style={{ position: "absolute", top: 4, right: 4, width: 8, height: 8, background: C.terra, borderRadius: "50%" }} />}
             </button>
@@ -172,29 +269,24 @@ export default function MechanicDashboard() {
           {/* DASHBOARD */}
           {active === "dashboard" && (
             <div style={{ animation: "fade-in .3s ease" }}>
-              {/* Incoming request alert */}
               {requests.length > 0 && isOnline && (
-                <div style={{ background: `linear-gradient(135deg, ${C.terra}, ${C.orange})`, borderRadius: 16, padding: "20px 24px", marginBottom: 20, display: "flex", gap: 20, alignItems: "center", animation: "slide-up .3s ease" }}>
-                  <div style={{ fontSize: 36, animation: "pulse-dot 1s infinite" }}>🚨</div>
+                <div style={{ background: `linear-gradient(135deg, ${C.terra}, ${C.orange})`, borderRadius: 16, padding: "20px 24px", marginBottom: 20, display: "flex", gap: 20, alignItems: "center" }}>
+                  <div style={{ fontSize: 36 }}>🚨</div>
                   <div style={{ flex: 1, color: "white" }}>
                     <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, marginBottom: 4 }}>NEW BOOKING REQUEST!</div>
-                    <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)" }}>{requests[0].customer} · {requests[0].vehicle} · {requests[0].issue}</div>
-                    <div style={{ fontSize: 13, color: "rgba(255,255,255,.7)", marginTop: 2 }}>{requests[0].distance} away · {requests[0].fare}</div>
+                    <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)" }}>{requests[0].service} · {requests[0].location_address}</div>
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button onClick={() => setActive("requests")} style={{ padding: "10px 20px", background: "white", color: C.terra, border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>VIEW →</button>
-                  </div>
+                  <button onClick={() => setActive("requests")} style={{ padding: "10px 20px", background: "white", color: C.terra, border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>VIEW →</button>
                 </div>
               )}
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="💰" label="TODAY'S EARNINGS" value="₹1,240" delta="↑ 18% vs yesterday" color={C.amber} />
-                <StatsCard icon="✅" label="JOBS TODAY" value="4" delta="2 more pending" color={C.green} />
+                <StatsCard icon="🆕" label="PENDING REQUESTS" value={String(requests.length)} delta="Live from DB" color={C.terra} />
+                <StatsCard icon="✅" label="ACTIVE JOBS" value={String(acceptedJobs.length)} delta="In progress" color={C.green} />
+                <StatsCard icon="📋" label="COMPLETED" value={String(completedJobs.length)} delta="All time" color={C.amber} />
                 <StatsCard icon="⭐" label="MY RATING" value="4.9" delta="234 reviews" color={C.orange} />
-                <StatsCard icon="📋" label="THIS MONTH" value="₹38,400" delta="Target: ₹42,000" color={C.terra} />
               </div>
 
-              {/* Earnings chart */}
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 20, marginBottom: 20 }}>
                 <Card>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
@@ -205,9 +297,7 @@ export default function MechanicDashboard() {
                     {revenueData.map((val, i) => (
                       <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4, height: "100%", justifyContent: "flex-end" }}>
                         <div style={{ fontSize: 10, color: C.textMuted }}>₹{(val / 1000).toFixed(1)}k</div>
-                        <div style={{ width: "100%", background: i === 6 ? C.amber : "rgba(224,123,26,.2)", borderRadius: "4px 4px 0 0", height: `${(val / maxBar) * 110}px`, transition: "height .5s ease", cursor: "pointer" }}
-                          onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = C.amber}
-                          onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = i === 6 ? C.amber : "rgba(224,123,26,.2)"} />
+                        <div style={{ width: "100%", background: i === 6 ? C.amber : "rgba(224,123,26,.2)", borderRadius: "4px 4px 0 0", height: `${(val / maxBar) * 110}px`, transition: "height .5s ease" }} />
                       </div>
                     ))}
                   </div>
@@ -234,28 +324,30 @@ export default function MechanicDashboard() {
                 </Card>
               </div>
 
-              {/* Recent jobs */}
               <Card>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 14 }}>
-                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 600, color: C.textPrimary }}>Recent Jobs</h3>
+                  <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 600, color: C.textPrimary }}>Recent Completed Jobs</h3>
                   <Btn variant="ghost" onClick={() => setActive("completed")} style={{ fontSize: 12 }}>View All →</Btn>
                 </div>
-                <table className="data-table">
-                  <thead><tr><th>Booking</th><th>Customer</th><th>Issue</th><th>Date</th><th>Earned</th><th>Rating</th><th>Status</th></tr></thead>
-                  <tbody>
-                    {sampleBookings.map(b => (
-                      <tr key={b.id}>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id}</span></td>
-                        <td>Customer</td>
-                        <td>{b.issue}</td>
-                        <td>{b.date}</td>
-                        <td><strong>₹{b.amount || "—"}</strong></td>
-                        <td style={{ color: C.amber }}>⭐ 4.9</td>
-                        <td><StatusBadge status={b.status} /></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {completedJobs.length === 0 ? (
+                  <p style={{ color: C.textMuted, fontSize: 14, textAlign: "center", padding: "20px 0" }}>No completed jobs yet</p>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>Booking ID</th><th>Service</th><th>Location</th><th>Date</th><th>Amount</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {completedJobs.slice(0, 5).map(b => (
+                        <tr key={b.id}>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                          <td>{b.service}</td>
+                          <td>{b.location_address || "—"}</td>
+                          <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                          <td><strong style={{ color: C.green }}>₹{b.price || "—"}</strong></td>
+                          <td><StatusBadge status={b.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -263,12 +355,22 @@ export default function MechanicDashboard() {
           {/* NEW REQUESTS */}
           {active === "requests" && (
             <div style={{ animation: "fade-in .3s ease" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, color: C.textPrimary }}>Live Requests from DB</h3>
+                <Btn variant="ghost" onClick={fetchBookings} style={{ fontSize: 12 }}>🔄 Refresh</Btn>
+              </div>
+
               {!isOnline ? (
                 <Card style={{ textAlign: "center", padding: 48 }}>
                   <div style={{ fontSize: 48, marginBottom: 16 }}>⚫</div>
                   <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 22, color: C.textSecondary }}>You're Offline</h3>
                   <p style={{ color: C.textMuted, marginBottom: 20 }}>Toggle online to start receiving job requests</p>
                   <Btn onClick={() => setIsOnline(true)}>Go Online</Btn>
+                </Card>
+              ) : loadingRequests ? (
+                <Card style={{ textAlign: "center", padding: 48 }}>
+                  <div style={{ fontSize: 36, marginBottom: 12 }}>⏳</div>
+                  <p style={{ color: C.textMuted }}>Loading requests from database...</p>
                 </Card>
               ) : requests.length === 0 ? (
                 <Card style={{ textAlign: "center", padding: 48 }}>
@@ -279,35 +381,36 @@ export default function MechanicDashboard() {
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   {requests.map(req => (
-                    <div key={req.id} style={{ background: C.white, border: `2px solid ${C.terra}`, borderRadius: 16, padding: 24, animation: "slide-up .3s ease", position: "relative", overflow: "hidden" }}>
-                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${C.terra}, transparent)`, width: `${(timers[req.id] / req.time) * 100}%`, transition: "width 1s linear" }} />
+                    <div key={req.id} style={{ background: C.white, border: `2px solid ${C.terra}`, borderRadius: 16, padding: 24, position: "relative", overflow: "hidden" }}>
+                      <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: 3, background: `linear-gradient(90deg, ${C.terra}, transparent)`, width: `${((timers[req.id] || 0) / 30) * 100}%`, transition: "width 1s linear" }} />
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
                         <div>
                           <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: C.terra, letterSpacing: 1, marginBottom: 6 }}>🚨 NEW BOOKING REQUEST</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 22, fontWeight: 700, color: C.textPrimary }}>{req.customer}</div>
-                          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2 }}>{req.vehicle} · {req.issue}</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 22, fontWeight: 700, color: C.textPrimary }}>{req.service}</div>
+                          <div style={{ fontSize: 14, color: C.textSecondary, marginTop: 2 }}>{req.location_address || "Location not specified"}</div>
+                          <div style={{ fontSize: 12, color: C.textMuted, fontFamily: "'Space Mono',monospace", marginTop: 4 }}>ID: {req.id.slice(0, 8)}...</div>
                         </div>
                         <div style={{ textAlign: "right" }}>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: timers[req.id] <= 5 ? C.red : C.terra }}>{timers[req.id]}s</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700, color: (timers[req.id] || 0) <= 5 ? C.red : C.terra }}>{timers[req.id] || 0}s</div>
                           <div style={{ fontSize: 11, color: C.textMuted }}>to respond</div>
                         </div>
                       </div>
 
                       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 20 }}>
                         <div style={{ background: C.cream, borderRadius: 10, padding: "12px 16px", textAlign: "center" }}>
-                          <div style={{ fontSize: 20, marginBottom: 4 }}>📍</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 700, color: C.textPrimary }}>{req.distance}</div>
-                          <div style={{ fontSize: 11, color: C.textMuted }}>away</div>
-                        </div>
-                        <div style={{ background: C.cream, borderRadius: 10, padding: "12px 16px", textAlign: "center" }}>
                           <div style={{ fontSize: 20, marginBottom: 4 }}>💰</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 700, color: C.textPrimary }}>{req.fare}</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 700, color: C.textPrimary }}>₹{req.price || "TBD"}</div>
                           <div style={{ fontSize: 11, color: C.textMuted }}>estimate</div>
                         </div>
                         <div style={{ background: C.cream, borderRadius: 10, padding: "12px 16px", textAlign: "center" }}>
                           <div style={{ fontSize: 20, marginBottom: 4 }}>⚙️</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 16, fontWeight: 700, color: C.textPrimary }}>{req.issue}</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, color: C.textPrimary }}>{req.service}</div>
                           <div style={{ fontSize: 11, color: C.textMuted }}>issue type</div>
+                        </div>
+                        <div style={{ background: C.cream, borderRadius: 10, padding: "12px 16px", textAlign: "center" }}>
+                          <div style={{ fontSize: 20, marginBottom: 4 }}>📅</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 700, color: C.textPrimary }}>{new Date(req.created_at).toLocaleTimeString()}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted }}>requested at</div>
                         </div>
                       </div>
 
@@ -328,7 +431,7 @@ export default function MechanicDashboard() {
             </div>
           )}
 
-          {/* ACCEPTED JOBS (Active) */}
+          {/* ACCEPTED JOBS */}
           {active === "accepted" && (
             <div style={{ animation: "fade-in .3s ease" }}>
               {acceptedJobs.length === 0 ? (
@@ -342,13 +445,11 @@ export default function MechanicDashboard() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
                   {acceptedJobs.map(job => (
                     <Card key={job.id}>
-                      {/* Map placeholder */}
                       <div style={{ background: "#e8dcc8", borderRadius: 12, height: 200, marginBottom: 20, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
                         <div style={{ position: "absolute", inset: 0, backgroundImage: "linear-gradient(rgba(224,123,26,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(224,123,26,.06) 1px,transparent 1px)", backgroundSize: "30px 30px" }} />
                         <div style={{ textAlign: "center", zIndex: 2, position: "relative" }}>
                           <div style={{ fontSize: 40, animation: "float 2s ease-in-out infinite" }}>📍</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 600, color: C.brown }}>Customer Location</div>
-                          <div style={{ fontSize: 13, color: C.textSecondary }}>{job.distance} away</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 600, color: C.brown }}>{job.location_address || "Customer Location"}</div>
                         </div>
                         <button style={{ position: "absolute", bottom: 12, right: 12, padding: "8px 16px", background: C.green, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}
                           onClick={() => showToast("Opening Google Maps...")}>
@@ -356,36 +457,33 @@ export default function MechanicDashboard() {
                         </button>
                       </div>
 
-                      {/* Customer info */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
                         <div style={{ background: C.cream, borderRadius: 10, padding: 16 }}>
-                          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Oswald',sans-serif", marginBottom: 6 }}>CUSTOMER</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{job.customer}</div>
-                          <div style={{ fontSize: 13, color: C.textSecondary }}>{job.vehicle}</div>
-                          <div style={{ fontSize: 13, color: C.terra, fontWeight: 600, marginTop: 4 }}>🔧 {job.issue}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Oswald',sans-serif", marginBottom: 6 }}>SERVICE</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 700, color: C.textPrimary }}>{job.service}</div>
+                          <div style={{ fontSize: 13, color: C.terra, fontWeight: 600, marginTop: 4 }}>{job.location_address}</div>
                         </div>
                         <div style={{ background: C.cream, borderRadius: 10, padding: 16 }}>
-                          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Oswald',sans-serif", marginBottom: 6 }}>FARE ESTIMATE</div>
-                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.amberDark }}>{job.fare}</div>
+                          <div style={{ fontSize: 11, color: C.textMuted, fontFamily: "'Oswald',sans-serif", marginBottom: 6 }}>FARE</div>
+                          <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.amberDark }}>₹{job.price || "TBD"}</div>
                           <div style={{ fontSize: 12, color: C.textMuted }}>Final after completion</div>
                         </div>
                       </div>
 
-                      {/* Progress steps */}
                       <div style={{ marginBottom: 20 }}>
                         <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, color: C.textSecondary, marginBottom: 12, letterSpacing: .5 }}>JOB PROGRESS</div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                           {JOB_STEPS.map((step, i) => {
                             const current = jobStep[job.id] ?? 0;
                             const done = i < current;
-                            const active = i === current;
+                            const isActive = i === current;
                             return (
-                              <div key={step} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, background: active ? "rgba(224,123,26,.08)" : done ? "rgba(45,122,58,.06)" : "transparent", border: `1px solid ${active ? C.amber : done ? C.green : C.border}` }}>
-                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? C.green : active ? C.amber : C.cream2, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, flexShrink: 0 }}>
+                              <div key={step} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 14px", borderRadius: 8, background: isActive ? "rgba(224,123,26,.08)" : done ? "rgba(45,122,58,.06)" : "transparent", border: `1px solid ${isActive ? C.amber : done ? C.green : C.border}` }}>
+                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: done ? C.green : isActive ? C.amber : C.cream2, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontSize: 13, flexShrink: 0 }}>
                                   {done ? "✓" : i + 1}
                                 </div>
-                                <span style={{ fontSize: 14, fontWeight: active ? 600 : 400, color: active ? C.amberDark : done ? C.green : C.textMuted, flex: 1 }}>{step}</span>
-                                {active && <span style={{ fontSize: 11, color: C.amber, fontFamily: "'Oswald',sans-serif", fontWeight: 700 }}>CURRENT</span>}
+                                <span style={{ fontSize: 14, fontWeight: isActive ? 600 : 400, color: isActive ? C.amberDark : done ? C.green : C.textMuted, flex: 1 }}>{step}</span>
+                                {isActive && <span style={{ fontSize: 11, color: C.amber, fontFamily: "'Oswald',sans-serif", fontWeight: 700 }}>CURRENT</span>}
                                 {done && <span style={{ fontSize: 11, color: C.green }}>Done</span>}
                               </div>
                             );
@@ -393,20 +491,13 @@ export default function MechanicDashboard() {
                         </div>
                       </div>
 
-                      {/* Actions */}
                       <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                        <button onClick={() => advanceStep(job.id)}
-                          style={{ flex: 2, padding: "13px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 700, cursor: "pointer", letterSpacing: .5, minWidth: 180 }}>
+                        <button onClick={() => advanceStep(job)}
+                          style={{ flex: 2, padding: "13px", background: C.amber, color: "white", border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 15, fontWeight: 700, cursor: "pointer", minWidth: 180 }}>
                           {(jobStep[job.id] ?? 0) < JOB_STEPS.length - 1 ? `✅ ${JOB_STEPS[(jobStep[job.id] ?? 0)]}` : "🏁 Complete Job"}
                         </button>
-                        <button onClick={() => showToast("Calling customer...")}
-                          style={{ flex: 1, padding: "13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, minWidth: 100 }}>
-                          📞 Call
-                        </button>
-                        <button onClick={() => showToast("Opening chat...")}
-                          style={{ flex: 1, padding: "13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, minWidth: 100 }}>
-                          💬 Chat
-                        </button>
+                        <button onClick={() => showToast("Calling customer...")} style={{ flex: 1, padding: "13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, minWidth: 100 }}>📞 Call</button>
+                        <button onClick={() => showToast("Opening chat...")} style={{ flex: 1, padding: "13px", background: C.cream2, border: `1px solid ${C.border}`, borderRadius: 8, fontSize: 14, cursor: "pointer", fontWeight: 500, minWidth: 100 }}>💬 Chat</button>
                       </div>
                     </Card>
                   ))}
@@ -419,27 +510,31 @@ export default function MechanicDashboard() {
           {active === "completed" && (
             <div style={{ animation: "fade-in .3s ease" }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 24 }}>
-                <StatsCard icon="✅" label="TOTAL COMPLETED" value="234" delta="All time" color={C.green} />
-                <StatsCard icon="💰" label="TOTAL EARNED" value="₹2,34,000" color={C.amber} />
+                <StatsCard icon="✅" label="TOTAL COMPLETED" value={String(completedJobs.length)} delta="From DB" color={C.green} />
+                <StatsCard icon="💰" label="TOTAL EARNED" value={`₹${completedJobs.reduce((s, b) => s + (b.price || 0), 0)}`} color={C.amber} />
                 <StatsCard icon="⭐" label="AVG RATING" value="4.9 / 5" color={C.orange} />
               </div>
               <Card>
                 <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Completed Jobs</h3>
-                <table className="data-table">
-                  <thead><tr><th>Booking ID</th><th>Customer</th><th>Issue</th><th>Date</th><th>Earned</th><th>Rating</th></tr></thead>
-                  <tbody>
-                    {sampleBookings.filter(b => b.status === "completed").map(b => (
-                      <tr key={b.id}>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id}</span></td>
-                        <td>Customer</td>
-                        <td>{b.issue}</td>
-                        <td>{b.date}</td>
-                        <td><strong style={{ color: C.green }}>₹{b.amount}</strong></td>
-                        <td style={{ color: C.amber }}>⭐ 4.9</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                {completedJobs.length === 0 ? (
+                  <p style={{ color: C.textMuted, fontSize: 14, textAlign: "center", padding: "20px 0" }}>No completed jobs yet</p>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>Booking ID</th><th>Service</th><th>Location</th><th>Date</th><th>Earned</th><th>Status</th></tr></thead>
+                    <tbody>
+                      {completedJobs.map(b => (
+                        <tr key={b.id}>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                          <td>{b.service}</td>
+                          <td>{b.location_address || "—"}</td>
+                          <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                          <td><strong style={{ color: C.green }}>₹{b.price || "—"}</strong></td>
+                          <td><StatusBadge status={b.status} /></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -453,23 +548,27 @@ export default function MechanicDashboard() {
                 <StatsCard icon="📊" label="ALL TIME" value="₹2,34,000" color={C.orange} />
                 <StatsCard icon="⏳" label="PENDING PAYOUT" value="₹3,200" color={C.terra} />
               </div>
-              <Card style={{ marginBottom: 20 }}>
-                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Earnings Breakdown</h3>
-                <table className="data-table">
-                  <thead><tr><th>Date</th><th>Booking ID</th><th>Service</th><th>Gross</th><th>Platform Fee</th><th>Net Earned</th></tr></thead>
-                  <tbody>
-                    {sampleBookings.filter(b => b.amount).map(b => (
-                      <tr key={b.id}>
-                        <td>{b.date}</td>
-                        <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id}</span></td>
-                        <td>{b.issue}</td>
-                        <td>₹{b.amount}</td>
-                        <td style={{ color: C.terra }}>-₹{Math.floor((b.amount || 0) * 0.08)}</td>
-                        <td><strong style={{ color: C.green }}>₹{Math.floor((b.amount || 0) * 0.92)}</strong></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <Card>
+                <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Earnings from Completed Jobs</h3>
+                {completedJobs.length === 0 ? (
+                  <p style={{ color: C.textMuted, fontSize: 14, textAlign: "center", padding: "20px 0" }}>No earnings yet</p>
+                ) : (
+                  <table className="data-table">
+                    <thead><tr><th>Date</th><th>Booking ID</th><th>Service</th><th>Gross</th><th>Platform Fee</th><th>Net Earned</th></tr></thead>
+                    <tbody>
+                      {completedJobs.map(b => (
+                        <tr key={b.id}>
+                          <td>{new Date(b.created_at).toLocaleDateString()}</td>
+                          <td><span style={{ fontFamily: "'Space Mono',monospace", fontSize: 12, color: C.amber }}>{b.id.slice(0, 8)}...</span></td>
+                          <td>{b.service}</td>
+                          <td>₹{b.price || 0}</td>
+                          <td style={{ color: C.terra }}>-₹{Math.floor((b.price || 0) * 0.08)}</td>
+                          <td><strong style={{ color: C.green }}>₹{Math.floor((b.price || 0) * 0.92)}</strong></td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </Card>
             </div>
           )}
@@ -483,32 +582,23 @@ export default function MechanicDashboard() {
                   <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 48, fontWeight: 700, color: "#f59e2a", marginBottom: 4 }}>₹3,200</div>
                   <div style={{ fontSize: 13, color: "rgba(255,255,255,.6)" }}>Next payout: Tomorrow, 9:00 AM</div>
                   <div style={{ display: "flex", gap: 12, marginTop: 20 }}>
-                    <button onClick={() => showToast("Withdrawal initiated!")} style={{ padding: "10px 24px", background: "white", color: C.brown, border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>
-                      💳 Withdraw Now
-                    </button>
-                    <button onClick={() => showToast("Bank details updated!")} style={{ padding: "10px 24px", background: "transparent", color: "white", border: "1px solid rgba(255,255,255,.4)", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
-                      🏦 Bank Details
-                    </button>
+                    <button onClick={() => showToast("Withdrawal initiated!")} style={{ padding: "10px 24px", background: "white", color: C.brown, border: "none", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 14, fontWeight: 700, cursor: "pointer" }}>💳 Withdraw Now</button>
+                    <button onClick={() => showToast("Bank details updated!")} style={{ padding: "10px 24px", background: "transparent", color: "white", border: "1px solid rgba(255,255,255,.4)", borderRadius: 8, fontFamily: "'Oswald',sans-serif", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>🏦 Bank Details</button>
                   </div>
                 </div>
               </Card>
               <Card>
                 <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 600, color: C.textPrimary, marginBottom: 16 }}>Transaction History</h3>
-                {[
-                  { icon: "✅", desc: "Job completed — BK003", amount: "+₹459", date: "Today", color: C.green },
-                  { icon: "✅", desc: "Job completed — BK001", amount: "+₹322", date: "Yesterday", color: C.green },
-                  { icon: "💸", desc: "Payout to SBI Bank", amount: "-₹3,200", date: "28 May", color: C.terra },
-                  { icon: "✅", desc: "Job completed — BK002", amount: "+₹460", date: "27 May", color: C.green },
-                ].map((t, i) => (
+                {completedJobs.slice(0, 5).map((b, i) => (
                   <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 0", borderBottom: `1px solid ${C.border}` }}>
                     <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.cream2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>{t.icon}</div>
+                      <div style={{ width: 36, height: 36, borderRadius: "50%", background: C.cream2, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>✅</div>
                       <div>
-                        <div style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary }}>{t.desc}</div>
-                        <div style={{ fontSize: 11, color: C.textMuted }}>{t.date}</div>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: C.textPrimary }}>Job completed — {b.service}</div>
+                        <div style={{ fontSize: 11, color: C.textMuted }}>{new Date(b.created_at).toLocaleDateString()}</div>
                       </div>
                     </div>
-                    <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 700, color: t.color }}>{t.amount}</div>
+                    <div style={{ fontFamily: "'Oswald',sans-serif", fontSize: 17, fontWeight: 700, color: C.green }}>+₹{Math.floor((b.price || 0) * 0.92)}</div>
                   </div>
                 ))}
               </Card>
@@ -526,8 +616,8 @@ export default function MechanicDashboard() {
               <Card>
                 <h3 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 18, fontWeight: 600, color: C.textPrimary, marginBottom: 20 }}>Customer Reviews</h3>
                 {[
-                  { name: "Amit S.", rating: 5, text: "Very professional! Fixed my engine issue quickly. Highly recommended.", date: "30 May 2025" },
-                  { name: "Priya R.", rating: 5, text: "Came within 7 minutes at midnight. Absolute lifesaver. 5 stars!", date: "28 May 2025" },
+                  { name: "Amit S.", rating: 5, text: "Very professional! Fixed my engine issue quickly.", date: "30 May 2025" },
+                  { name: "Priya R.", rating: 5, text: "Came within 7 minutes at midnight. Absolute lifesaver!", date: "28 May 2025" },
                   { name: "Ravi T.", rating: 4, text: "Good work. Took a bit longer than expected but result was great.", date: "26 May 2025" },
                 ].map((r, i) => (
                   <div key={i} style={{ padding: "16px 0", borderBottom: `1px solid ${C.border}` }}>
@@ -556,16 +646,16 @@ export default function MechanicDashboard() {
                   <div style={{ width: 80, height: 80, borderRadius: "50%", background: C.amber, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontFamily: "'Oswald',sans-serif", fontSize: 32, fontWeight: 700 }}>{user.name.charAt(0)}</div>
                   <div>
                     <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 24, fontWeight: 700, color: C.textPrimary }}>{user.name}</h2>
-                    <div style={{ color: C.amber, fontSize: 16, marginTop: 2 }}>⭐ 4.9 · 234 jobs · Engine Specialist</div>
+                    <div style={{ color: C.amber, fontSize: 16, marginTop: 2 }}>⭐ 4.9 · {completedJobs.length} jobs completed</div>
                     <div style={{ fontSize: 13, color: C.textMuted, marginTop: 2 }}>{user.city} · {user.phone}</div>
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
                   {[
                     { label: "Full Name", val: user.name },
                     { label: "Phone", val: user.phone },
                     { label: "Email", val: user.email },
-                    { label: "City", val: user.city || "Nellore" },
+                    { label: "City", val: user.city || "—" },
                     { label: "Experience", val: "8 years" },
                     { label: "Skills", val: "Engine, Electrical" },
                   ].map((f, i) => (
@@ -575,7 +665,6 @@ export default function MechanicDashboard() {
                     </div>
                   ))}
                 </div>
-                <Btn onClick={() => showToast("Profile updated!")}>Update Profile</Btn>
               </Card>
             </div>
           )}
