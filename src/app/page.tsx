@@ -3,6 +3,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Navbar from "@/components/layout/Navbar";
 import { C } from "@/components/ui";
+import { useGeolocation } from "@/hooks/useGeolocation";
+import MapEmbed from "@/components/MapEmbed";
+
+const MOCK_NEARBY_MECHANICS = [
+  { lat: 37.7899, lng: -122.4044 },
+  { lat: 37.7769, lng: -122.4174 },
+];
 
 function StoryAnimation({ C }: { C: Record<string, string> }) {
   const [scene, setScene] = useState(0);
@@ -95,6 +102,7 @@ function StoryAnimation({ C }: { C: Record<string, string> }) {
 
 export default function Home() {
   const router = useRouter();
+  const geo = useGeolocation();
   const [counts, setCounts] = useState({ jobs: 0, mechanics: 0, cities: 0, rating: 0 });
   const [heroVisible, setHeroVisible] = useState(false);
   const [activeService, setActiveService] = useState(-1);
@@ -120,7 +128,6 @@ export default function Home() {
       if (progress >= 1) clearInterval(timer);
     }, 16);
 
-    // Safe IntersectionObserver — only in browser
     let observer: IntersectionObserver | null = null;
     try {
       observer = new IntersectionObserver(entries => {
@@ -128,7 +135,6 @@ export default function Home() {
       }, { threshold: 0.1 });
       document.querySelectorAll(".reveal").forEach(el => observer!.observe(el));
     } catch (_) {
-      // IntersectionObserver not available (old mobile browser) — just show everything
       document.querySelectorAll(".reveal").forEach(el => el.classList.add("revealed"));
     }
 
@@ -267,6 +273,50 @@ export default function Home() {
               </div>
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* MECHANICS NEAR YOU */}
+      <section style={{ padding: "80px 60px", background: C.white }}>
+        <div style={{ maxWidth: 960, margin: "0 auto" }}>
+          <h2 style={{ fontFamily: "'Oswald',sans-serif", fontSize: 36, fontWeight: 700, color: C.textPrimary, marginBottom: 28 }}>
+            Mechanics <span style={{ color: C.amber }}>near you</span>
+          </h2>
+
+          {geo.status === "idle" && (
+            <div style={{ height: 300, background: C.cream, borderRadius: 16, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", color: C.textMuted, fontSize: 14 }}>
+              Waiting for location permission…
+            </div>
+          )}
+
+          {geo.status === "loading" && (
+            <div style={{ height: 300, background: C.cream, borderRadius: 16, border: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "center", gap: 10, color: C.textMuted, fontSize: 14 }}>
+              <span style={{ width: 16, height: 16, borderRadius: "50%", border: `2px solid ${C.amber}`, borderTopColor: "transparent", display: "inline-block", animation: "spin .8s linear infinite" }} />
+              Getting your location…
+            </div>
+          )}
+
+          {geo.status === "error" && (
+            <div style={{ height: 300, background: C.cream, borderRadius: 16, border: `1px dashed ${C.border}`, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: C.textMuted, fontSize: 14, textAlign: "center", padding: 24, gap: 8 }}>
+              <span>{geo.message}</span>
+              <span style={{ fontSize: 12 }}>Enable location access in your browser to see nearby mechanics.</span>
+            </div>
+          )}
+
+          {geo.status === "success" && (
+            <>
+              <MapEmbed
+                center={{ lat: geo.lat, lng: geo.lng }}
+                customerMarker={{ lat: geo.lat, lng: geo.lng }}
+                mechanicMarker={MOCK_NEARBY_MECHANICS[0]}
+                className="h-72 shadow-sm"
+                zoom={13}
+              />
+              <p style={{ marginTop: 12, fontSize: 14, color: C.textMuted }}>
+                {MOCK_NEARBY_MECHANICS.length} mechanics available within 5 km
+              </p>
+            </>
+          )}
         </div>
       </section>
 
@@ -510,6 +560,7 @@ export default function Home() {
       <style>{`
         .reveal{opacity:0;transform:translateY(28px);transition:opacity .6s ease,transform .6s ease}
         .reveal.revealed{opacity:1;transform:translateY(0)}
+        @keyframes spin{to{transform:rotate(360deg)}}
         @media(max-width:768px){
           .hero-grid{grid-template-columns:1fr !important;padding:90px 20px 48px !important;gap:36px !important;}
           .hero-h1{font-size:48px !important;letter-spacing:-1px !important;}
